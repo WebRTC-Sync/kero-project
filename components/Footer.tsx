@@ -1,6 +1,12 @@
+"use client";
+
 import { Github } from "lucide-react";
 
 export default function Footer() {
+  const scrollTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   return (
     <footer className="w-full border-t border-white/10 bg-black py-12 px-6 md:px-20">
       <div className="flex flex-col md:flex-row items-center justify-between gap-8">
@@ -10,8 +16,8 @@ export default function Footer() {
         </div>
         
         <div className="flex items-center gap-8 text-sm text-gray-400">
-          <a href="#features" className="hover:text-white transition-colors">Features</a>
-          <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+          <button onClick={() => scrollTo('features')} className="hover:text-white transition-colors">Features</button>
+          <button onClick={() => scrollTo('faq')} className="hover:text-white transition-colors">FAQ</button>
           <a href="https://github.com/TOPONNN" className="hover:text-white transition-colors flex items-center gap-2">
             <Github className="h-4 w-4" />
             GitHub
