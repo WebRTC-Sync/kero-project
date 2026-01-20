@@ -17,3 +17,4 @@ export default function Home() {
     </main>
   );
 }
+// Auto-deploy test: Tue Jan 20 23:51:02 KST 2026
