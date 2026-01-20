@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
 import { ChevronDown, Music, Target, MessageSquareText } from "lucide-react";
 
@@ -9,7 +9,7 @@ const modes = [
     id: "01",
     title: "일반",
     subtitle: "자유롭게 즐기는 노래",
-    description: "점수나 제한 없이 자유롭게 노래를 즐기세요. 편안한 분위기에서 마음껏 부르세요.",
+    description: ["점수나 제한 없이 자유롭게 노래를 즐기세요.", "편안한 분위기에서 마음껏 부르세요."],
     icon: Music,
     accent: "#C0C0C0",
   },
@@ -17,7 +17,7 @@ const modes = [
     id: "02", 
     title: "퍼펙트 스코어",
     subtitle: "완벽한 음정을 향해",
-    description: "AI 음정 분석으로 실시간 점수를 확인하세요. 100점에 도전해보세요!",
+    description: ["AI 음정 분석으로 실시간 점수를 확인하세요.", "100점에 도전해보세요!"],
     icon: Target,
     accent: "#FFD700",
   },
@@ -25,7 +25,7 @@ const modes = [
     id: "03",
     title: "가사 맞추기",
     subtitle: "기억력 테스트",
-    description: "빈칸으로 가려진 가사를 맞춰보세요. 얼마나 많은 노래 가사를 알고 있나요?",
+    description: ["빈칸으로 가려진 가사를 맞춰보세요.", "얼마나 많은 노래 가사를 알고 있나요?"],
     icon: MessageSquareText,
     accent: "#FF6B6B",
   },
@@ -33,7 +33,10 @@ const modes = [
 
 export default function HeroSection() {
   const [activeMode, setActiveMode] = useState(0);
+  const [isInView, setIsInView] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastScrollTime = useRef(0);
+  
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start start", "end start"],
@@ -42,6 +45,44 @@ export default function HeroSection() {
   const y = useTransform(scrollYProgress, [0, 1], ["0%", "50%"]);
   const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
   const scale = useTransform(scrollYProgress, [0, 1], [1, 1.2]);
+
+  // Check if section is in view
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsInView(entry.isIntersecting && entry.intersectionRatio > 0.5),
+      { threshold: 0.5 }
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // Mouse wheel handler for mode switching
+  const handleWheel = useCallback((e: WheelEvent) => {
+    if (!isInView) return;
+    
+    const now = Date.now();
+    if (now - lastScrollTime.current < 500) return; // Debounce 500ms
+    
+    if (e.deltaY > 0 && activeMode < modes.length - 1) {
+      // Scroll down - next mode
+      setActiveMode(prev => prev + 1);
+      lastScrollTime.current = now;
+      e.preventDefault();
+    } else if (e.deltaY < 0 && activeMode > 0) {
+      // Scroll up - previous mode
+      setActiveMode(prev => prev - 1);
+      lastScrollTime.current = now;
+      e.preventDefault();
+    }
+  }, [isInView, activeMode]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      return () => container.removeEventListener('wheel', handleWheel);
+    }
+  }, [handleWheel]);
 
   const currentMode = modes[activeMode];
   const Icon = currentMode.icon;
@@ -111,9 +152,11 @@ export default function HeroSection() {
               <p className="text-xl font-medium tracking-wide text-gray-300 md:text-2xl">
                 {currentMode.subtitle}
               </p>
-              <p className="max-w-md text-gray-400">
-                {currentMode.description}
-              </p>
+              <div className="max-w-md text-gray-400 space-y-1">
+                {currentMode.description.map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
+              </div>
             </motion.div>
           </AnimatePresence>
 
@@ -179,7 +222,7 @@ export default function HeroSection() {
           transition={{ repeat: Infinity, duration: 2 }}
           className="self-center flex flex-col items-center gap-2 text-white/50"
         >
-          <span className="text-xs tracking-widest uppercase">Scroll</span>
+          <span className="text-xs tracking-widest uppercase">Scroll to switch mode</span>
           <ChevronDown className="h-5 w-5" />
         </motion.div>
       </div>
