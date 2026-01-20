@@ -18,3 +18,4 @@ export default function Home() {
   );
 }
 // Auto-deploy test: Tue Jan 20 23:51:02 KST 2026
+// Build: 1768920767
