@@ -2,31 +2,31 @@
 
 import { useRef, useState } from "react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
-import { ChevronDown, Mic, Users, PartyPopper } from "lucide-react";
+import { ChevronDown, Music, Target, MessageSquareText } from "lucide-react";
 
 const modes = [
   {
     id: "01",
-    title: "SOLO",
-    subtitle: "나만의 무대",
-    description: "혼자서 편하게 노래하고 녹음하세요. AI 점수 시스템으로 실력을 향상시키세요.",
-    icon: Mic,
+    title: "일반",
+    subtitle: "자유롭게 즐기는 노래",
+    description: "점수나 제한 없이 자유롭게 노래를 즐기세요. 편안한 분위기에서 마음껏 부르세요.",
+    icon: Music,
     accent: "#C0C0C0",
   },
   {
     id: "02", 
-    title: "DUO",
-    subtitle: "둘이서 함께",
-    description: "친구와 1:1로 듀엣을 즐기세요. 실시간 음성으로 마치 옆에 있는 듯한 경험.",
-    icon: Users,
+    title: "퍼펙트 스코어",
+    subtitle: "완벽한 음정을 향해",
+    description: "AI 음정 분석으로 실시간 점수를 확인하세요. 100점에 도전해보세요!",
+    icon: Target,
     accent: "#FFD700",
   },
   {
     id: "03",
-    title: "PARTY",
-    subtitle: "다같이 신나게",
-    description: "최대 8명까지 함께하는 파티 모드. 점수 경쟁과 실시간 채팅을 즐기세요.",
-    icon: PartyPopper,
+    title: "가사 맞추기",
+    subtitle: "기억력 테스트",
+    description: "빈칸으로 가려진 가사를 맞춰보세요. 얼마나 많은 노래 가사를 알고 있나요?",
+    icon: MessageSquareText,
     accent: "#FF6B6B",
   },
 ];
