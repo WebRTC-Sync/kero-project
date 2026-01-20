@@ -61,21 +61,25 @@ export default function HeroSection() {
   const handleWheel = useCallback((e: WheelEvent) => {
     if (hasExitedHero || window.scrollY > 10) return;
     
+    const isLastMode = activeMode === modes.length - 1;
+    const isFirstMode = activeMode === 0;
+    const scrollingDown = e.deltaY > 0;
+    const scrollingUp = e.deltaY < 0;
+    
+    if (scrollingDown && isLastMode) return;
+    if (scrollingUp && isFirstMode) return;
+    
+    e.preventDefault();
+    
     const now = Date.now();
     if (now - lastScrollTime.current < 400) return;
     
-    if (e.deltaY > 0) {
-      if (activeMode < modes.length - 1) {
-        setActiveMode(prev => prev + 1);
-        lastScrollTime.current = now;
-        e.preventDefault();
-      }
-    } else if (e.deltaY < 0) {
-      if (activeMode > 0) {
-        setActiveMode(prev => prev - 1);
-        lastScrollTime.current = now;
-        e.preventDefault();
-      }
+    if (scrollingDown && activeMode < modes.length - 1) {
+      setActiveMode(prev => prev + 1);
+      lastScrollTime.current = now;
+    } else if (scrollingUp && activeMode > 0) {
+      setActiveMode(prev => prev - 1);
+      lastScrollTime.current = now;
     }
   }, [hasExitedHero, activeMode]);
 
