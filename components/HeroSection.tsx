@@ -62,7 +62,7 @@ export default function HeroSection() {
     const heroHeight = containerRef.current?.offsetHeight || window.innerHeight;
     const mouseYRatio = e.clientY / heroHeight;
     
-    if (mouseYRatio > 0.75) return;
+    if (mouseYRatio > 0.65) return;
     
     const now = Date.now();
     if (now - lastScrollTime.current < 500) return;
