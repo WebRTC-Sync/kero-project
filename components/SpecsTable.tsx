@@ -1,11 +1,16 @@
 export default function SpecsTable() {
   const specs = [
-    { component: "실시간 통신", tech: "WebRTC", desc: "P2P 기반 초저지연 오디오/비디오 스트리밍" },
-    { component: "시그널링 서버", tech: "Socket.io", desc: "실시간 연결 관리 및 방 생성" },
-    { component: "음성 처리", tech: "Web Audio API", desc: "에코 제거, 노이즈 캔슬링, 믹싱" },
-    { component: "가사 동기화", tech: "WebSocket", desc: "실시간 가사 스크롤 및 타이밍" },
-    { component: "점수 시스템", tech: "Pitch Detection", desc: "실시간 음정 분석 및 점수 계산" },
-    { component: "프론트엔드", tech: "Next.js 15", desc: "React 기반 서버 사이드 렌더링" },
+    { component: "실시간 통신", tech: "WebRTC + LiveKit", desc: "P2P 기반 초저지연 오디오/비디오 스트리밍" },
+    { component: "백엔드", tech: "Express.js", desc: "Node.js 기반 RESTful API 서버" },
+    { component: "실시간 이벤트", tech: "Socket.io", desc: "양방향 실시간 통신 및 방 관리" },
+    { component: "메시지 큐", tech: "RabbitMQ + Redis", desc: "비동기 작업 처리 및 캐싱" },
+    { component: "AI 음원 분리", tech: "Demucs", desc: "보컬/MR 자동 분리 (Meta AI)" },
+    { component: "AI 가사 추출", tech: "Whisper", desc: "음성→텍스트 자동 변환 (OpenAI)" },
+    { component: "AI 음정 분석", tech: "CREPE", desc: "실시간 음정 추적 및 점수 계산" },
+    { component: "AI Worker", tech: "Flask + Celery", desc: "GPU 기반 AI 작업 비동기 처리" },
+    { component: "스토리지", tech: "AWS S3", desc: "음원 및 미디어 파일 저장" },
+    { component: "상태 관리", tech: "Redux", desc: "클라이언트 전역 상태 관리" },
+    { component: "모니터링", tech: "ELK Stack", desc: "로그 수집, 분석, 시각화" },
   ];
 
   return (
