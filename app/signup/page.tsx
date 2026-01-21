@@ -3,13 +3,17 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Music, Eye, EyeOff, Check } from "lucide-react";
+import { Music, Eye, EyeOff, Check, Send } from "lucide-react";
 
 export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
   const [formData, setFormData] = useState({
-    nickname: "",
+    name: "",
+    phone: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -17,6 +21,19 @@ export default function SignupPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSendVerification = () => {
+    if (formData.email) {
+      setVerificationSent(true);
+      console.log("Verification email sent to:", formData.email);
+    }
+  };
+
+  const handleVerifyCode = () => {
+    if (verificationCode === "123456") {
+      setEmailVerified(true);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -29,8 +46,8 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-6 py-12">
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-[#FFD700]/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-[#FF6B6B]/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-[#C0C0C0]/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-[#FFD700]/10 rounded-full blur-3xl" />
       </div>
 
       <motion.div
@@ -40,7 +57,7 @@ export default function SignupPage() {
         className="relative z-10 w-full max-w-md"
       >
         <Link href="/" className="flex items-center justify-center gap-3 mb-12">
-          <Music className="w-8 h-8 text-[#FFD700]" />
+          <Music className="w-8 h-8 text-[#C0C0C0]" />
           <span className="text-4xl font-bold text-white">KERO</span>
         </Link>
 
@@ -50,30 +67,86 @@ export default function SignupPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">닉네임</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">이름</label>
               <input
                 type="text"
-                name="nickname"
-                value={formData.nickname}
+                name="name"
+                value={formData.name}
                 onChange={handleChange}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700] transition-colors"
-                placeholder="사용할 닉네임"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#C0C0C0] transition-colors"
+                placeholder="홍길동"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">연락처</label>
+              <input
+                type="tel"
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#C0C0C0] transition-colors"
+                placeholder="010-1234-5678"
                 required
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">이메일</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700] transition-colors"
-                placeholder="example@email.com"
-                required
-              />
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  disabled={emailVerified}
+                  className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#C0C0C0] transition-colors disabled:opacity-50"
+                  placeholder="example@email.com"
+                  required
+                />
+                <motion.button
+                  type="button"
+                  onClick={handleSendVerification}
+                  disabled={!formData.email || emailVerified}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="px-4 py-3 rounded-xl bg-[#C0C0C0] text-black font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {emailVerified ? <Check className="w-5 h-5" /> : <Send className="w-5 h-5" />}
+                </motion.button>
+              </div>
             </div>
+
+            {verificationSent && !emailVerified && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="space-y-2"
+              >
+                <label className="block text-sm font-medium text-gray-300">인증코드</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value)}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#C0C0C0] transition-colors"
+                    placeholder="인증코드 6자리"
+                    maxLength={6}
+                  />
+                  <motion.button
+                    type="button"
+                    onClick={handleVerifyCode}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="px-6 py-3 rounded-xl bg-[#FFD700] text-black font-medium text-sm"
+                  >
+                    확인
+                  </motion.button>
+                </div>
+                <p className="text-xs text-gray-500">이메일로 전송된 인증코드를 입력하세요</p>
+              </motion.div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">비밀번호</label>
@@ -83,7 +156,7 @@ export default function SignupPage() {
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700] transition-colors pr-12"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#C0C0C0] transition-colors pr-12"
                   placeholder="8자 이상 입력"
                   required
                   minLength={8}
@@ -107,7 +180,7 @@ export default function SignupPage() {
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   className={`w-full bg-white/5 border rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none transition-colors pr-12 ${
-                    passwordMatch ? "border-green-500" : "border-white/10 focus:border-[#FFD700]"
+                    passwordMatch ? "border-green-500" : "border-white/10 focus:border-[#C0C0C0]"
                   }`}
                   placeholder="비밀번호 재입력"
                   required
@@ -128,16 +201,17 @@ export default function SignupPage() {
             <div className="flex items-start gap-2 text-sm">
               <input type="checkbox" required className="mt-1 rounded bg-white/5 border-white/10" />
               <span className="text-gray-400">
-                <Link href="#" className="text-[#FFD700] hover:text-white transition-colors">이용약관</Link> 및{" "}
-                <Link href="#" className="text-[#FFD700] hover:text-white transition-colors">개인정보처리방침</Link>에 동의합니다
+                <Link href="#" className="text-[#C0C0C0] hover:text-white transition-colors">이용약관</Link> 및{" "}
+                <Link href="#" className="text-[#C0C0C0] hover:text-white transition-colors">개인정보처리방침</Link>에 동의합니다
               </span>
             </div>
 
             <motion.button
               type="submit"
+              disabled={!emailVerified}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              className="w-full bg-gradient-to-r from-[#FFD700] to-[#FF6B6B] text-black font-bold py-3 rounded-xl transition-all hover:opacity-90"
+              className="w-full bg-gradient-to-r from-[#C0C0C0] to-[#FFD700] text-black font-bold py-3 rounded-xl transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               가입하기
             </motion.button>
