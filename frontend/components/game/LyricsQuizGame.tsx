@@ -237,7 +237,7 @@ export default function LyricsQuizGame() {
     if (!isAnswerRevealed) {
       hasProcessedRevealRef.current = false;
     }
-  }, [isAnswerRevealed, currentQuestionIndex, quizQuestions.length, dispatch, roundResults]);
+   }, [isAnswerRevealed, currentQuestionIndex, dispatch, roundResults]);
 
    const handleSelectAnswer = (index: number) => {
      if (submitted || isAnswerRevealed) return;
@@ -760,7 +760,7 @@ export default function LyricsQuizGame() {
   };
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-[#46178F] to-[#1D0939] p-3 sm:pl-16 sm:pr-56 font-sans">
+    <div className="fixed inset-0 bg-gradient-to-br from-[#46178F] to-[#1D0939] p-3 font-sans">
       {/* Hidden YouTube audio player for TJ songs */}
       {youtubeVideoId && (
         <iframe

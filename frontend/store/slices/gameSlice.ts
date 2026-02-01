@@ -165,9 +165,13 @@ const gameSlice = createSlice({
     updatePitch: (state, action: PayloadAction<{ frequency: number; accuracy: number }>) => {
       state.currentPitch = action.payload.frequency;
     },
-    setQuizQuestions: (state, action: PayloadAction<QuizQuestion[]>) => {
-      state.quizQuestions = action.payload;
-    },
+     setQuizQuestions: (state, action: PayloadAction<QuizQuestion[]>) => {
+       state.quizQuestions = action.payload;
+       state.currentQuestionIndex = 0;
+       state.selectedAnswer = null;
+       state.isAnswerRevealed = false;
+       state.roundResults = [];
+     },
     nextQuestion: (state) => {
       state.currentQuestionIndex += 1;
       state.selectedAnswer = null;

@@ -14,7 +14,7 @@ import type { RootState } from "@/store";
 import { setRoom } from "@/store/slices/roomSlice";
 import { 
   setGameMode, setGameStatus, setCurrentSong, setQuizQuestions,
-  addToQueue, removeFromQueue, updateQueueItem, playNextInQueue
+  addToQueue, removeFromQueue, updateQueueItem, playNextInQueue, resetQuiz
 } from "@/store/slices/gameSlice";
 import { useSocket } from "@/hooks/useSocket";
 import NormalModeGame from "@/components/game/NormalModeGame";
@@ -132,9 +132,10 @@ export default function RoomPage() {
    const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
    useEffect(() => {
+    dispatch(resetQuiz());
     const fetchRoom = async () => {
       try {
-        const res = await fetch(`/api/rooms/${code}`);
+         const res = await fetch(`/api/rooms/${code}`);
         const data = await res.json();
         
         if (!data.success) {
@@ -491,6 +492,7 @@ export default function RoomPage() {
   };
 
     const startQuiz = async () => {
+      dispatch(resetQuiz());
       setIsQuizLoading(true);
       try {
          const res = await fetch(`/api/songs/quiz/generate?count=${quizCount}`);
