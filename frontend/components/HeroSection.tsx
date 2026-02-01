@@ -180,12 +180,12 @@ export default function HeroSection() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.3 }}
-              className="space-y-3 md:space-y-4 rounded-2xl bg-black/40 backdrop-blur-sm p-4 md:bg-transparent md:backdrop-blur-none md:p-0 md:rounded-none"
+              className="space-y-4"
             >
-              <p className="text-lg sm:text-xl font-semibold tracking-wide text-white md:text-2xl md:font-medium md:text-gray-300">
+              <p className="text-base sm:text-xl font-medium tracking-wide text-gray-300 md:text-2xl">
                 {currentMode.subtitle}
               </p>
-              <div className="max-w-md text-gray-300 md:text-gray-400 space-y-1 text-sm md:text-base">
+              <div className="max-w-md text-gray-400 space-y-1">
                 {currentMode.description.map((line, i) => (
                   <p key={i}>{line}</p>
                 ))}
@@ -235,16 +235,16 @@ export default function HeroSection() {
                   onClick={() => setActiveMode(i)}
                   className={`flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all ${
                     isActive
-                      ? "bg-white/10 border-white/20"
-                      : "bg-white/5 border-white/10"
+                      ? "bg-black/60 backdrop-blur-md border-white/30"
+                      : "bg-black/40 backdrop-blur-sm border-white/10"
                   }`}
-                  style={isActive ? { borderColor: `${mode.accent}60`, boxShadow: `0 0 20px -5px ${mode.accent}30` } : undefined}
+                  style={isActive ? { borderColor: `${mode.accent}80`, boxShadow: `0 0 24px -4px ${mode.accent}40` } : undefined}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <ModeIcon className="w-5 h-5 shrink-0" style={{ color: isActive ? mode.accent : '#666' }} />
+                  <ModeIcon className="w-5 h-5 shrink-0" style={{ color: isActive ? mode.accent : '#aaa' }} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold truncate ${isActive ? 'text-white' : 'text-gray-400'}`}>{mode.title}</p>
-                    <p className="text-[11px] text-gray-500 truncate">{mode.subtitle}</p>
+                    <p className={`text-sm font-bold truncate ${isActive ? 'text-white' : 'text-gray-200'}`}>{mode.title}</p>
+                    <p className={`text-[11px] truncate ${isActive ? 'text-gray-300' : 'text-gray-400'}`}>{mode.subtitle}</p>
                   </div>
                 </motion.button>
               );
