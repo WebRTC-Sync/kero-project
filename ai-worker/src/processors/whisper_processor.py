@@ -8,25 +8,10 @@ import torch
 # --- PyTorch 2.8 compatibility patch ---
 # WhisperX/pyannote uses omegaconf classes in saved models which
 # torch.load(weights_only=True) rejects in PyTorch 2.6+.
-# Method 1: allowlist omegaconf globals for safe loading.
-try:
-    import omegaconf
-    torch.serialization.add_safe_globals([
-        omegaconf.listconfig.ListConfig,
-        omegaconf.dictconfig.DictConfig,
-        omegaconf.base.Container,
-        omegaconf.base.Node,
-        omegaconf.omegaconf.OmegaConf,
-    ])
-except (ImportError, AttributeError):
-    pass
-
-# Method 2: monkey-patch torch.load to default weights_only=False.
-_original_torch_load = torch.load
-def _patched_torch_load(*args, **kwargs):
-    kwargs.setdefault('weights_only', False)
-    return _original_torch_load(*args, **kwargs)
-torch.load = _patched_torch_load
+# Override the internal default so ALL torch.load calls (including those
+# inside pyannote/whisperx that capture their own reference) use
+# weights_only=False unless the caller explicitly passes weights_only=True.
+torch.serialization._default_to_weights_only = lambda *_args, **_kwargs: False
 
 import numpy as np
 import librosa
