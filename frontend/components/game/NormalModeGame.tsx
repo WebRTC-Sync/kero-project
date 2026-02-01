@@ -460,49 +460,50 @@ export default function NormalModeGame() {
         />
       )}
 
-      {/* 1. Background Layer */}
-      <div className="absolute inset-0 z-0">
-        {videoId ? (
-          <>
-            <iframe
-              src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&loop=1&playlist=${videoId}&modestbranding=1&playsinline=1`}
-              className="absolute top-1/2 left-1/2 w-[180%] h-[180%] -translate-x-1/2 -translate-y-1/2"
-              allow="autoplay; encrypted-media"
-              title="Background MV"
-              style={{ pointerEvents: 'none' }}
-            />
+       {/* 1. Background Layer */}
+       <div className="absolute inset-0 z-0" style={{ transform: 'translateZ(0)' }}>
+         {videoId ? (
+           <>
+             <iframe
+               src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&loop=1&playlist=${videoId}&modestbranding=1&playsinline=1`}
+               className="absolute top-1/2 left-1/2 w-[140%] h-[140%] -translate-x-1/2 -translate-y-1/2"
+               allow="autoplay; encrypted-media"
+               title="Background MV"
+               style={{ pointerEvents: 'none' }}
+               loading="lazy"
+             />
             <div className="absolute inset-0 bg-black/40" />
           </>
         ) : (
-          <div className="absolute inset-0 overflow-hidden">
-            {/* Animated gradient orbs */}
-            <div 
-              className="absolute w-[600px] h-[600px] rounded-full blur-[120px] opacity-20"
-              style={{
-                background: 'radial-gradient(circle, #C25E8C 0%, transparent 70%)',
-                top: '10%',
-                left: '20%',
-                animation: 'float1 20s ease-in-out infinite',
-              }}
-            />
-            <div 
-              className="absolute w-[500px] h-[500px] rounded-full blur-[100px] opacity-15"
-              style={{
-                background: 'radial-gradient(circle, #4F46E5 0%, transparent 70%)',
-                bottom: '10%',
-                right: '15%',
-                animation: 'float2 25s ease-in-out infinite',
-              }}
-            />
-            <div 
-              className="absolute w-[400px] h-[400px] rounded-full blur-[80px] opacity-10"
-              style={{
-                background: 'radial-gradient(circle, #06B6D4 0%, transparent 70%)',
-                top: '50%',
-                left: '60%',
-                animation: 'float3 18s ease-in-out infinite',
-              }}
-            />
+           <div className="absolute inset-0 overflow-hidden">
+             {/* Animated gradient orbs */}
+             <div 
+               className="absolute w-[400px] h-[400px] rounded-full blur-[80px] opacity-20"
+               style={{
+                 background: 'radial-gradient(circle, #C25E8C 0%, transparent 70%)',
+                 top: '10%',
+                 left: '20%',
+                 animation: 'float1 20s ease-in-out infinite',
+               }}
+             />
+             <div 
+               className="absolute w-[350px] h-[350px] rounded-full blur-[60px] opacity-15"
+               style={{
+                 background: 'radial-gradient(circle, #4F46E5 0%, transparent 70%)',
+                 bottom: '10%',
+                 right: '15%',
+                 animation: 'float2 25s ease-in-out infinite',
+               }}
+             />
+             <div 
+               className="absolute w-[300px] h-[300px] rounded-full blur-[50px] opacity-10"
+               style={{
+                 background: 'radial-gradient(circle, #06B6D4 0%, transparent 70%)',
+                 top: '50%',
+                 left: '60%',
+                 animation: 'float3 18s ease-in-out infinite',
+               }}
+             />
           </div>
         )}
       </div>
@@ -603,10 +604,10 @@ export default function NormalModeGame() {
         )}
       </AnimatePresence>
 
-      {/* 3. Lyrics Display (Singing Phase) */}
-      <AnimatePresence>
-        {gamePhase === 'singing' && !isInterlude && (
-          <div className="absolute bottom-[20%] sm:bottom-[25%] left-0 right-0 z-20 px-4 sm:px-8 md:px-16 flex flex-col gap-6 sm:gap-8 md:gap-12 w-full max-w-7xl mx-auto">
+       {/* 3. Lyrics Display (Singing Phase) */}
+       <AnimatePresence>
+         {gamePhase === 'singing' && !isInterlude && (
+           <div className="absolute bottom-[20%] sm:bottom-[25%] left-0 right-0 z-20 px-4 sm:px-8 md:px-16 flex flex-col gap-6 sm:gap-8 md:gap-12 w-full max-w-7xl mx-auto will-change-transform">
              {/* Current Line */}
              <div className="self-start pl-2 sm:pl-4 md:pl-10 relative">
                {currentLine && (

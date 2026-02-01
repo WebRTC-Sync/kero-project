@@ -88,25 +88,26 @@ export default function RoomPage() {
    const [userName, setUserName] = useState<string>("Guest");
    const [visitorId, setVisitorId] = useState<string>("");
    
-   const [bgVideoId, setBgVideoId] = useState<string | null>(null);
-   useEffect(() => {
-     const fetchRandomMV = async () => {
-       try {
-         const res = await fetch("/api/songs/random-mv");
-         const data = await res.json();
-         if (data.success && data.data?.videoId) {
-           setBgVideoId(data.data.videoId);
-         } else {
-           setBgVideoId("gdZLi9oWNZg");
-         }
-       } catch {
-         setBgVideoId("gdZLi9oWNZg");
-       }
-     };
-     fetchRandomMV();
-   }, []);
+    const [bgVideoId, setBgVideoId] = useState<string | null>(null);
+    const [bgVideoLoaded, setBgVideoLoaded] = useState(false);
+    useEffect(() => {
+      const fetchRandomMV = async () => {
+        try {
+          const res = await fetch("/api/songs/random-mv");
+          const data = await res.json();
+          if (data.success && data.data?.videoId) {
+            setBgVideoId(data.data.videoId);
+          } else {
+            setBgVideoId("gdZLi9oWNZg");
+          }
+        } catch {
+          setBgVideoId("gdZLi9oWNZg");
+        }
+      };
+      fetchRandomMV();
+    }, []);
 
-   const [bgMounted, setBgMounted] = useState(false);
+    const [bgMounted, setBgMounted] = useState(false);
 
   const [room, setRoomData] = useState<{
     id: string;
@@ -535,7 +536,7 @@ export default function RoomPage() {
 
   if (gameStatus === "playing" && (currentSong || room?.gameMode === "lyrics_quiz")) {
     return (
-      <div className="fixed inset-0 bg-black text-white p-2 sm:pl-16 sm:pr-56">
+      <div className="fixed inset-0 bg-black text-white">
         <GameComponent />
         
         {/* Top-left: small back button - compact, doesn't block quiz content */}
@@ -643,17 +644,19 @@ export default function RoomPage() {
    return (
      <div className="min-h-screen bg-black text-white overflow-hidden relative">
        {/* 배경 뮤비 */}
-       {bgMounted && bgVideoId && (
-         <div className="fixed inset-0 z-0 pointer-events-none">
-           <iframe
-             src={`https://www.youtube.com/embed/${bgVideoId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&loop=1&playlist=${bgVideoId}&modestbranding=1&playsinline=1`}
-             className="absolute top-1/2 left-1/2 w-[150%] h-[150%] -translate-x-1/2 -translate-y-1/2 opacity-60"
-             allow="autoplay; encrypted-media"
-             title="Background Video"
-           />
-           <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black/90" />
-         </div>
-       )}
+        {bgMounted && bgVideoId && (
+          <div className="fixed inset-0 z-0 pointer-events-none">
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${bgVideoId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&loop=1&playlist=${bgVideoId}&modestbranding=1&playsinline=1`}
+              loading="lazy"
+              onLoad={() => setBgVideoLoaded(true)}
+              className={`absolute top-1/2 left-1/2 w-[150%] h-[150%] -translate-x-1/2 -translate-y-1/2 transition-opacity duration-1000 ${bgVideoLoaded ? 'opacity-60' : 'opacity-0'}`}
+              allow="autoplay; encrypted-media"
+              title="Background Video"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/60 to-black/90" />
+          </div>
+        )}
 
       {/* 상단 헤더 */}
       <header className="relative z-20 flex items-center justify-between px-4 py-3 md:p-6 bg-black/30 backdrop-blur-md border-b border-white/5">
@@ -710,7 +713,7 @@ export default function RoomPage() {
                   <button
                     key={num}
                     onClick={() => setQuizCount(num)}
-                    className={`px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-bold text-lg transition-all border ${
+                    className={`px-3 py-2 sm:px-5 sm:py-3 rounded-xl font-bold text-sm sm:text-base whitespace-nowrap transition-all border ${
                       quizCount === num
                         ? "bg-[#FF6B6B]/20 border-[#FF6B6B]/60 text-[#FF6B6B] shadow-[0_0_15px_-5px_rgba(255,107,107,0.4)]"
                         : "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-300"
