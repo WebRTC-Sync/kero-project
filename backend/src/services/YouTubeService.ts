@@ -22,6 +22,11 @@ export class YouTubeService {
   private readonly tempDir = "/tmp/kero-youtube";
   private readonly cookiesPath = "/app/cookies/youtube.txt";
 
+  private getSearchArgs(): string[] {
+    // Search operations should NOT use cookies to avoid polluting search history
+    return ["--no-mark-watched"];
+  }
+
   private async getCookiesArgs(): Promise<string[]> {
     try {
       await fs.access(this.cookiesPath);
@@ -54,10 +59,10 @@ export class YouTubeService {
   }
 
   async searchVideos(query: string, maxResults: number = 10): Promise<YouTubeSearchResult[]> {
-    const cookiesArgs = await this.getCookiesArgs();
+    const searchArgs = this.getSearchArgs();
     const promise = new Promise<YouTubeSearchResult[]>((resolve, reject) => {
       const args = [
-        ...cookiesArgs,
+        ...searchArgs,
         `ytsearch${maxResults}:${query}`,
         "--dump-json",
         "--flat-playlist",
@@ -152,10 +157,10 @@ export class YouTubeService {
   }
 
   async searchMV4K(query: string): Promise<YouTubeSearchResult | null> {
-    const cookiesArgs = await this.getCookiesArgs();
+    const searchArgs = this.getSearchArgs();
     const promise = new Promise<YouTubeSearchResult | null>((resolve) => {
       const args = [
-        ...cookiesArgs,
+        ...searchArgs,
         `ytsearch5:${query}`,
         "--dump-json",
         "--no-warnings",
