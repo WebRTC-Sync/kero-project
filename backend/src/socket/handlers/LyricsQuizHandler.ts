@@ -10,6 +10,7 @@ interface QuizState {
   streaks: Map<number, number>;
   scores: Map<number, number>;
   answeredQuestions: Set<number>;
+  participants: Map<number, string>;
 }
 
 export class LyricsQuizHandler {
@@ -41,17 +42,30 @@ export class LyricsQuizHandler {
       state.streaks.set(socket.data.participantId, newStreak);
 
        let points = 0;
-       if (isCorrect) {
-         const timeLeft = data.timeLeft || 0;
-         points = this.calculatePoints(question, timeLeft, newStreak);
-         const currentScore = state.scores.get(socket.data.participantId) || 0;
-         state.scores.set(socket.data.participantId, currentScore + points);
-         await roomService.updateParticipantScore(socket.data.participantId, points);
-       }
+      if (isCorrect) {
+        const timeLeft = data.timeLeft || 0;
+        points = this.calculatePoints(question, timeLeft, newStreak);
+        const currentScore = state.scores.get(socket.data.participantId) || 0;
+        state.scores.set(socket.data.participantId, currentScore + points);
+        await roomService.updateParticipantScore(socket.data.participantId, points);
+      }
 
-       // Force-advance on ANY first answer (moved outside isCorrect)
-       if (!state.answeredQuestions.has(data.questionIndex)) {
-         state.answeredQuestions.add(data.questionIndex);
+      // Track participant nickname for score broadcasting
+      state.participants.set(socket.data.participantId, socket.data.nickname || "???");
+
+      // Broadcast updated scores to all clients in the room
+      const scoresUpdate = Array.from(state.participants.entries()).map(([participantId, nickname]) => ({
+        odId: String(participantId),
+        odName: nickname,
+        score: state.scores.get(participantId) || 0,
+        combo: state.streaks.get(participantId) || 0,
+        accuracy: 0,
+      }));
+      this.io.to(data.roomCode).emit("game:scoresUpdate", scoresUpdate);
+
+      // Force-advance on ANY first answer (moved outside isCorrect)
+      if (!state.answeredQuestions.has(data.questionIndex)) {
+        state.answeredQuestions.add(data.questionIndex);
 
          // Tell all OTHER clients to advance to next question
          socket.to(data.roomCode).emit("quiz:force-advance", {
@@ -98,17 +112,18 @@ export class LyricsQuizHandler {
     });
   }
 
-   public initializeQuizState(roomCode: string, questions: any[]): void {
-     const state: QuizState = {
-       currentQuestionIndex: 0,
-       questions,
-       answers: new Map(),
-       streaks: new Map(),
-       scores: new Map(),
-       answeredQuestions: new Set(),
-     };
-     this.quizStates.set(roomCode, state);
-   }
+    public initializeQuizState(roomCode: string, questions: any[]): void {
+      const state: QuizState = {
+        currentQuestionIndex: 0,
+        questions,
+        answers: new Map(),
+        streaks: new Map(),
+        scores: new Map(),
+        answeredQuestions: new Set(),
+        participants: new Map(),
+      };
+      this.quizStates.set(roomCode, state);
+    }
 
    public getQuizState(roomCode: string) {
      return this.quizStates.get(roomCode);
@@ -151,14 +166,15 @@ export class LyricsQuizHandler {
        };
      });
 
-     const state: QuizState = {
-       currentQuestionIndex: 0,
-       questions: questionsData,
-       answers: new Map(),
-       streaks: new Map(),
-       scores: new Map(),
-       answeredQuestions: new Set(),
-     };
+    const state: QuizState = {
+      currentQuestionIndex: 0,
+      questions: questionsData,
+      answers: new Map(),
+      streaks: new Map(),
+      scores: new Map(),
+      answeredQuestions: new Set(),
+      participants: new Map(),
+    };
      this.quizStates.set(roomCode, state);
 
      this.io.to(roomCode).emit("game:started", {

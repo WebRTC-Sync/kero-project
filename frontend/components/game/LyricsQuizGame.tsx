@@ -682,10 +682,10 @@ export default function LyricsQuizGame() {
                 <Users className="w-5 h-5" /> 참가자
               </h3>
               <div className="space-y-2">
-                {[...participants].sort((a, b) => {
-                  const scoreA = scores.find(s => s.odId === a.id)?.score || 0;
-                  const scoreB = scores.find(s => s.odId === b.id)?.score || 0;
-                  return scoreB - scoreA;
+                 {[...participants].sort((a, b) => {
+                   const scoreA = scores.find(s => String(s.odId) === String(a.id))?.score || 0;
+                   const scoreB = scores.find(s => String(s.odId) === String(b.id))?.score || 0;
+                   return scoreB - scoreA;
                 }).map((p, idx) => (
                   <div key={p.id} className="flex items-center justify-between px-4 py-2 rounded-lg bg-white/5">
                     <div className="flex items-center gap-3">
@@ -695,7 +695,7 @@ export default function LyricsQuizGame() {
                       <span className="text-white font-bold">{p.nickname}</span>
                       {p.isHost && <span className="text-xs bg-[#FFD700]/20 text-[#FFD700] px-2 py-0.5 rounded-full">HOST</span>}
                     </div>
-                    <span className="text-white/70 font-mono">{scores.find(s => s.odId === p.id)?.score || 0}점</span>
+                    <span className="text-white/70 font-mono">{scores.find(s => String(s.odId) === String(p.id))?.score || 0}점</span>
                   </div>
                 ))}
               </div>
