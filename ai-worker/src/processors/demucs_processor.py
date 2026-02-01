@@ -1,89 +1,86 @@
+# type: ignore
 import os
-import torch
-import torchaudio
-from typing import Callable, Optional
-from demucs_infer.pretrained import get_model
-from demucs_infer.apply import apply_model
-from src.config import TEMP_DIR
-from src.services.s3_service import s3_service
+from typing import Callable, Any
+
+from audio_separator.separator import Separator  # type: ignore
+
+from src.config import TEMP_DIR  # type: ignore
+from src.services.s3_service import s3_service  # type: ignore
+
+
+MODEL_NAME = "model_bs_roformer_ep_317_sdr_12.9744.ckpt"
 
 
 class DemucsProcessor:
+    model_name: str
+
     def __init__(self):
-        self.model = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model_name: str = MODEL_NAME
 
-    def _load_model(self):
-        if self.model is None:
-            self.model = get_model("htdemucs_ft")
-            self.model.to(self.device)
-
-    def separate(self, audio_path: str, song_id: str, folder_name: str = None, progress_callback: Optional[Callable[[int], None]] = None) -> dict:
+    def separate(
+        self,
+        audio_path: str,
+        song_id: str,
+        folder_name: str | None = None,
+        progress_callback: Callable[[int], None] | None = None,
+    ) -> dict[str, object]:
         if folder_name is None:
             folder_name = song_id
-        
-        # 시작 진행률 보고
+
         if progress_callback:
             progress_callback(0)
-            
-        self._load_model()
-
-        waveform, sample_rate = torchaudio.load(audio_path)
-
-        if sample_rate != self.model.samplerate:
-            resampler = torchaudio.transforms.Resample(sample_rate, self.model.samplerate)
-            waveform = resampler(waveform)
-
-        if waveform.dim() == 1:
-            waveform = waveform.unsqueeze(0)
-        if waveform.shape[0] == 1:
-            waveform = waveform.repeat(2, 1)
-
-        waveform = waveform.unsqueeze(0).to(self.device)
-
-        with torch.no_grad():
-            sources = apply_model(self.model, waveform, device=self.device, overlap=0.25, segment=None, shifts=2)
-
-        sources = sources.squeeze(0)
-        source_names = self.model.sources
 
         output_dir = os.path.join(TEMP_DIR, song_id)
         os.makedirs(output_dir, exist_ok=True)
 
-        results = {}
-        for i, name in enumerate(source_names):
-            output_path = os.path.join(output_dir, f"{name}.wav")
-            torchaudio.save(output_path, sources[i].cpu(), self.model.samplerate)
+        output_files: list[str] = []
+        results: dict[str, str] = {}
+        success = False
 
-            s3_key = f"songs/{folder_name}/{name}.wav"
-            url = s3_service.upload_file(output_path, s3_key)
-            results[name] = url
+        try:
+            separator: Any = Separator(output_dir=output_dir, output_format="WAV")
+            separator.load_model(self.model_name)  # type: ignore
+            output_files = separator.separate(audio_path)  # type: ignore
 
-            os.remove(output_path)
+            for output_file in output_files:
+                filename = os.path.basename(output_file)
+                if "Vocals" in filename:
+                    source_key = "vocals"
+                elif "Instrumental" in filename:
+                    source_key = "instrumental"
+                else:
+                    continue
 
-        vocals_url = results.get("vocals", "")
-        instrumental_parts = ["drums", "bass", "other"]
-        instrumental_sources = [sources[source_names.index(p)] for p in instrumental_parts if p in source_names]
+                s3_key = f"songs/{folder_name}/{source_key}.wav"
+                url = s3_service.upload_file(output_file, s3_key)
+                results[source_key] = url
 
-        if instrumental_sources:
-            instrumental = sum(instrumental_sources)
-            instrumental_path = os.path.join(output_dir, "instrumental.wav")
-            torchaudio.save(instrumental_path, instrumental.cpu(), self.model.samplerate)
+            success = True
+        finally:
+            for output_file in output_files:
+                if os.path.exists(output_file):
+                    try:
+                        os.remove(output_file)
+                    except OSError:
+                        pass
 
-            s3_key = f"songs/{folder_name}/instrumental.wav"
-            instrumental_url = s3_service.upload_file(instrumental_path, s3_key)
-            results["instrumental"] = instrumental_url
+            if os.path.exists(output_dir):
+                for file_name in os.listdir(output_dir):
+                    file_path = os.path.join(output_dir, file_name)
+                    try:
+                        os.remove(file_path)
+                    except OSError:
+                        pass
+                try:
+                    os.rmdir(output_dir)
+                except OSError:
+                    pass
 
-            os.remove(instrumental_path)
-
-        os.rmdir(output_dir)
-        
-        # 완료 진행률 보고
-        if progress_callback:
-            progress_callback(100)
+            if progress_callback and success:
+                progress_callback(100)
 
         return {
-            "vocals_url": vocals_url,
+            "vocals_url": results.get("vocals", ""),
             "instrumental_url": results.get("instrumental", ""),
             "all_sources": results,
         }
