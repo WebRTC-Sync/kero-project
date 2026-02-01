@@ -20,6 +20,17 @@ interface DownloadResult {
 
 export class YouTubeService {
   private readonly tempDir = "/tmp/kero-youtube";
+  private readonly cookiesPath = "/app/cookies/youtube.txt";
+
+  private async getCookiesArgs(): Promise<string[]> {
+    try {
+      await fs.access(this.cookiesPath);
+      return ["--cookies", this.cookiesPath, "--no-mark-watched"];
+    } catch {
+      return ["--no-mark-watched"];
+    }
+  }
+
   private withTimeout<T>(
     promise: Promise<T>,
     ms: number,
@@ -43,8 +54,10 @@ export class YouTubeService {
   }
 
   async searchVideos(query: string, maxResults: number = 10): Promise<YouTubeSearchResult[]> {
+    const cookiesArgs = await this.getCookiesArgs();
     const promise = new Promise<YouTubeSearchResult[]>((resolve, reject) => {
       const args = [
+        ...cookiesArgs,
         `ytsearch${maxResults}:${query}`,
         "--dump-json",
         "--flat-playlist",
@@ -93,9 +106,11 @@ export class YouTubeService {
 
    async downloadAudio(videoId: string, songId: string): Promise<DownloadResult> {
      const outputPath = path.join(this.tempDir, `${songId}.flac`);
+    const cookiesArgs = await this.getCookiesArgs();
 
     const downloadPromise = new Promise<void>((resolve, reject) => {
        const args = [
+         ...cookiesArgs,
          `https://www.youtube.com/watch?v=${videoId}`,
          "-x",
          "--audio-format", "flac",
@@ -136,9 +151,55 @@ export class YouTubeService {
     };
   }
 
+  async searchMV4K(query: string): Promise<YouTubeSearchResult | null> {
+    const cookiesArgs = await this.getCookiesArgs();
+    const promise = new Promise<YouTubeSearchResult | null>((resolve) => {
+      const args = [
+        ...cookiesArgs,
+        `ytsearch5:${query}`,
+        "--dump-json",
+        "--no-warnings",
+        "--match-filter", "upload_date >= 20220101",
+      ];
+
+      const proc = spawn("yt-dlp", args);
+      let output = "";
+      let error = "";
+
+      proc.stdout.on("data", (data: Buffer) => { output += data.toString(); });
+      proc.stderr.on("data", (data: Buffer) => { error += data.toString(); });
+
+      proc.on("close", (code) => {
+        try {
+          const lines = output.trim().split("\n").filter(Boolean);
+          for (const line of lines) {
+            const data = JSON.parse(line);
+            if (data.id) {
+              resolve({
+                videoId: data.id,
+                title: data.title || "",
+                channel: data.channel || data.uploader || "",
+                duration: this.formatDuration(data.duration),
+                thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${data.id}/hqdefault.jpg`,
+              });
+              return;
+            }
+          }
+          resolve(null);
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+
+    return this.withTimeout(promise, 30000, "YouTube MV search timed out").catch(() => null);
+  }
+
   async getVideoInfo(videoId: string): Promise<{ title: string; artist: string; duration: number } | null> {
+    const cookiesArgs = await this.getCookiesArgs();
     const promise = new Promise<{ title: string; artist: string; duration: number } | null>((resolve) => {
       const args = [
+        ...cookiesArgs,
         `https://www.youtube.com/watch?v=${videoId}`,
         "--dump-json",
         "--no-warnings",

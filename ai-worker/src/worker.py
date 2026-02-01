@@ -43,9 +43,20 @@ class AIWorker:
                 "-o", output_path,
                 "--no-playlist",
                 "--no-warnings",
+                "--no-mark-watched",
                 "--js-runtimes", "deno",
                 "--remote-components", "ejs:github",
             ]
+            
+            cookies_paths = [
+                "/app/cookies/youtube.txt",
+                os.path.expanduser("~/youtube_cookies.txt"),
+            ]
+            for cookies_path in cookies_paths:
+                if os.path.exists(cookies_path):
+                    print(f"Using cookies from: {cookies_path}")
+                    cmd.extend(["--cookies", cookies_path])
+                    break
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             

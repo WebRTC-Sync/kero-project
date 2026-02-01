@@ -168,7 +168,7 @@ router.get("/random-mv", async (req: Request, res: Response) => {
     // Try cached YouTube results before live search
     const shuffled = [...tjSongs].sort(() => Math.random() - 0.5);
     for (const song of shuffled.slice(0, 10)) {
-      const ytCacheKey = `yt:mv:4k:${song.artist}:${song.title}`;
+      const ytCacheKey = `yt:mv:4k:2022:${song.artist}:${song.title}`;
       const ytCached = await redis.get(ytCacheKey);
       if (ytCached) {
         const data = JSON.parse(ytCached);
@@ -176,18 +176,18 @@ router.get("/random-mv", async (req: Request, res: Response) => {
       }
     }
 
-    // 3. Last resort: live YouTube search
+    // 3. Last resort: live YouTube search (2022+ 4K only)
     const randomSong = shuffled[0];
     const searchQuery = `${randomSong.artist} ${randomSong.title} 공식 MV 4K`;
-    const results = await youtubeService.searchVideos(searchQuery, 1);
+    const result = await youtubeService.searchMV4K(searchQuery);
     
-    if (results.length === 0) {
+    if (!result) {
       return res.json({ success: false, message: "No YouTube result found" });
     }
     
     // Cache for next time
-    const entry = { videoId: results[0].videoId, title: randomSong.title, artist: randomSong.artist };
-    await redis.setex(`yt:mv:4k:${randomSong.artist}:${randomSong.title}`, 86400, JSON.stringify(entry));
+    const entry = { videoId: result.videoId, title: randomSong.title, artist: randomSong.artist };
+    await redis.setex(`yt:mv:4k:2022:${randomSong.artist}:${randomSong.title}`, 86400, JSON.stringify(entry));
     
     res.json({ success: true, data: entry });
   } catch (error: any) {

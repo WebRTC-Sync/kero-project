@@ -443,7 +443,7 @@ export class SongService {
           batch.map(async (song) => {
             try {
               const searchQuery = `${song.artist} ${song.title} 공식 MV 4K`;
-              const ytCacheKey = `yt:mv:4k:${song.artist}:${song.title}`;
+              const ytCacheKey = `yt:mv:4k:2022:${song.artist}:${song.title}`;
               
               const existing = await redis.get(ytCacheKey);
               if (existing) {
@@ -452,9 +452,9 @@ export class SongService {
                 return;
               }
               
-              const videos = await youtubeService.searchVideos(searchQuery, 1).catch(() => []);
-              if (videos.length > 0) {
-                const entry = { videoId: videos[0].videoId, title: song.title, artist: song.artist };
+              const video = await youtubeService.searchMV4K(searchQuery).catch(() => null);
+              if (video) {
+                const entry = { videoId: video.videoId, title: song.title, artist: song.artist };
                 await redis.setex(ytCacheKey, 86400, JSON.stringify(entry));
                 pool.push(entry);
               }
