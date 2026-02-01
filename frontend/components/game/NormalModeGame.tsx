@@ -472,7 +472,7 @@ export default function NormalModeGame() {
                  style={{ pointerEvents: 'none' }}
                  loading="lazy"
                />
-            <div className="absolute inset-0 bg-black/40" />
+            <div className="absolute inset-0" />
           </>
         ) : (
            <div className="absolute inset-0 overflow-hidden">
