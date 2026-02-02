@@ -53,7 +53,7 @@ interface QueuedSong {
   status: "waiting" | "processing" | "ready" | "failed";
   videoId?: string;
   tjNumber?: string;
-  processingStep?: "download" | "demucs" | "whisper" | "crepe";
+   processingStep?: "download" | "separation" | "whisper" | "crepe";
   processingProgress?: number;
   processingMessage?: string;
   errorMessage?: string;

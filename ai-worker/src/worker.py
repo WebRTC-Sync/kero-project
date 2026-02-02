@@ -118,10 +118,10 @@ class AIWorker:
 
         try:
             if "separate" in tasks:
-                self._update_status(song_id, "processing", "음원 분리 중...", step="demucs", progress=0)
+                self._update_status(song_id, "processing", "음원 분리 중...", step="separation", progress=0)
                 separation_result = separator_processor.separate(
                     local_audio_path, song_id, folder_name,
-                    progress_callback=lambda p: self._update_status(song_id, "processing", f"음원 분리 중... {p}%", step="demucs", progress=p)
+                    progress_callback=lambda p: self._update_status(song_id, "processing", f"음원 분리 중... {p}%", step="separation", progress=p)
                 )
                 results["separation"] = separation_result
 

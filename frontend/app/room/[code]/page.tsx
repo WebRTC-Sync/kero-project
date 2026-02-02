@@ -840,7 +840,7 @@ export default function RoomPage() {
                               <Loader2 className="w-3.5 h-3.5 animate-spin text-yellow-400" />
                               <span className="text-xs text-yellow-400 font-bold">
                                 {song.processingStep === "download" && "다운로드"}
-                                {song.processingStep === "demucs" && "음원 분리"}
+                                {song.processingStep === "separation" && "음원 분리"}
                                 {song.processingStep === "whisper" && "자막 생성"}
                                 {song.processingStep === "crepe" && "음정 분석"}
                                 {!song.processingStep && "준비 중"}

@@ -17,7 +17,6 @@ import soundfile as sf
 from typing import List, Dict, Callable, Optional
 from src.config import TEMP_DIR, LYRICS_API_URL
 from src.services.s3_service import s3_service
-from src.processors.mfa_processor import mfa_processor
 
 
 class LyricsProcessor:
@@ -460,6 +459,19 @@ class LyricsProcessor:
             if idx < len(api_lines) - 1:
                 api_tokens.append(line_break)
 
+        line_word_tokens = []
+        for line_idx, (start_idx, end_idx) in enumerate(line_ranges):
+            words = api_lines[line_idx].split()
+            word_tokens = []
+            token_pos = start_idx
+            for word in words:
+                word_syllables = _extract_syllables(word)
+                n_syls = len(word_syllables)
+                token_indices = list(range(token_pos, min(token_pos + n_syls, end_idx)))
+                word_tokens.append(token_indices)
+                token_pos += n_syls
+            line_word_tokens.append(word_tokens)
+
         if not api_tokens:
             total_start = wx_syllables[0]["start_time"]
             total_end = wx_syllables[-1]["end_time"]
@@ -656,9 +668,73 @@ class LyricsProcessor:
                 char_offset += chars
             return word_timings
 
+        def _interpolate_unmatched_words(word_timings: List[Dict], line_start: float, line_end: float) -> None:
+            if not word_timings:
+                return
+
+            matched_indices = [
+                idx for idx, word in enumerate(word_timings)
+                if word.get("start_time") is not None and word.get("end_time") is not None
+            ]
+            if not matched_indices:
+                duration = max(line_end - line_start, 0.5)
+                step = duration / len(word_timings)
+                for idx, word in enumerate(word_timings):
+                    word["start_time"] = line_start + idx * step
+                    word["end_time"] = line_start + (idx + 1) * step
+                return
+
+            first_idx = matched_indices[0]
+            if first_idx > 0:
+                start = line_start
+                end = word_timings[first_idx]["start_time"]
+                gap = first_idx
+                step = (end - start) / gap if gap else 0.0
+                for offset in range(gap):
+                    word = word_timings[offset]
+                    word["start_time"] = start + offset * step
+                    word["end_time"] = start + (offset + 1) * step
+
+            for left_idx, right_idx in zip(matched_indices, matched_indices[1:]):
+                gap = right_idx - left_idx - 1
+                if gap <= 0:
+                    continue
+                start = word_timings[left_idx]["end_time"]
+                end = word_timings[right_idx]["start_time"]
+                step = (end - start) / gap if gap else 0.0
+                for offset in range(gap):
+                    word = word_timings[left_idx + 1 + offset]
+                    word["start_time"] = start + offset * step
+                    word["end_time"] = start + (offset + 1) * step
+
+            last_idx = matched_indices[-1]
+            if last_idx < len(word_timings) - 1:
+                start = word_timings[last_idx]["end_time"]
+                end = line_end
+                gap = len(word_timings) - 1 - last_idx
+                step = (end - start) / gap if gap else 0.0
+                for offset in range(gap):
+                    word = word_timings[last_idx + 1 + offset]
+                    word["start_time"] = start + offset * step
+                    word["end_time"] = start + (offset + 1) * step
+
+        def _enforce_monotonic(word_timings: List[Dict], min_word_dur: float, base_start: float) -> None:
+            prev_end = base_start
+            for word in word_timings:
+                start = float(word.get("start_time") or prev_end)
+                end = float(word.get("end_time") or start)
+                if start < prev_end:
+                    start = prev_end
+                if end < start + min_word_dur:
+                    end = start + min_word_dur
+                word["start_time"] = start
+                word["end_time"] = end
+                prev_end = end
+
         result = []
         prev_end = 0.0
-        for line in line_timings:
+        min_word_dur = 0.06
+        for line_idx, line in enumerate(line_timings):
             start_time = float(line["start_time"] or 0.0)
             end_time = float(line["end_time"] or (start_time + 0.5))
 
@@ -674,200 +750,67 @@ class LyricsProcessor:
             if duration > 15.0:
                 end_time = start_time + 15.0
 
-            word_timings = _build_word_timings(line["text"], start_time, end_time)
+            words = api_lines[line_idx].split()
+            word_timings: List[Dict] = []
+
+            range_start, range_end = line_ranges[line_idx]
+            aligned_for_line = [
+                aligned_indices[k] for k in range(range_start, range_end)
+                if aligned_indices[k] >= 0
+            ]
+
+            if words and not aligned_for_line:
+                word_timings = _build_word_timings(line["text"], start_time, end_time)
+            elif words:
+                for word_idx, word in enumerate(words):
+                    token_indices = []
+                    if word_idx < len(line_word_tokens[line_idx]):
+                        token_indices = line_word_tokens[line_idx][word_idx]
+
+                    aligned_wx = [
+                        aligned_indices[token_idx]
+                        for token_idx in token_indices
+                        if token_idx < len(aligned_indices) and aligned_indices[token_idx] >= 0
+                    ]
+                    if aligned_wx:
+                        min_idx = min(aligned_wx)
+                        max_idx = max(aligned_wx)
+                        word_timings.append({
+                            "start_time": wx_syllables[min_idx]["start_time"],
+                            "end_time": wx_syllables[max_idx]["end_time"],
+                            "text": word,
+                        })
+                    else:
+                        word_timings.append({
+                            "start_time": None,
+                            "end_time": None,
+                            "text": word,
+                        })
+
+                _interpolate_unmatched_words(word_timings, start_time, end_time)
+                _enforce_monotonic(word_timings, min_word_dur, start_time)
+
+                for word in word_timings:
+                    word["start_time"] = round(float(word["start_time"]), 3)
+                    word["end_time"] = round(float(word["end_time"]), 3)
+
+            if word_timings:
+                line_start_final = word_timings[0]["start_time"]
+                line_end_final = word_timings[-1]["end_time"]
+            else:
+                line_start_final = round(start_time, 3)
+                line_end_final = round(end_time, 3)
+
             result.append({
-                "start_time": round(start_time, 3),
-                "end_time": round(end_time, 3),
+                "start_time": round(float(line_start_final), 3),
+                "end_time": round(float(line_end_final), 3),
                 "text": line["text"],
                 "words": word_timings,
             })
-            prev_end = end_time
+            prev_end = float(line_end_final)
 
         return result
 
-    def _build_lines_with_mfa_only(self, audio_path: str, lyrics_text: str, language: str) -> List[Dict]:
-        """Build lines from API text using MFA-only timing (when WhisperX fails)."""
-        mfa_words: List[Dict] = []
-
-        def _clean_text_for_mfa(text: str) -> str:
-            clean = text.replace("\n", " ")
-            clean = re.sub(r'\[.*?\]', '', clean)
-            clean = re.sub(r'\(.*?\)', '', clean)
-            clean = re.sub(r'[♪~]', '', clean)
-            clean = re.sub(r'\s+', ' ', clean).strip()
-            return clean
-
-        if mfa_processor.is_available() and language in mfa_processor.LANGUAGE_MODELS:
-            try:
-                raw_lines = [line.strip() for line in lyrics_text.split("\n") if line.strip()]
-                # Inline speech segment detection (Silero-VAD)
-                try:
-                    from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
-                    vad_model = load_silero_vad()
-                    wav = read_audio(audio_path, sampling_rate=16000)
-                    speech_ts = get_speech_timestamps(
-                        wav, vad_model, sampling_rate=16000,
-                        threshold=0.3, min_speech_duration_ms=100, min_silence_duration_ms=50,
-                    )
-                    speech_segments = [(ts['start'] / 16000.0, ts['end'] / 16000.0) for ts in speech_ts]
-                    del vad_model
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                except Exception as e:
-                    print(f"[MFA-only] VAD failed: {e}")
-                    speech_segments = []
-
-                if not raw_lines or not speech_segments:
-                    raise RuntimeError("No lines or speech segments for chunked alignment")
-
-                # Build chunks from speech segments
-                max_chunk_dur = 40.0
-                min_chunk_dur = 20.0
-                gap_threshold = 1.0
-
-                chunks = []
-                current_start, current_end = speech_segments[0]
-                for seg_start, seg_end in speech_segments[1:]:
-                    gap = seg_start - current_end
-                    proposed_dur = seg_end - current_start
-                    if gap > gap_threshold or (proposed_dur > max_chunk_dur and (current_end - current_start) >= min_chunk_dur):
-                        chunks.append((current_start, current_end))
-                        current_start, current_end = seg_start, seg_end
-                    else:
-                        current_end = seg_end
-                chunks.append((current_start, current_end))
-
-                # Merge very short chunks to stabilize alignment
-                merged_chunks = []
-                for start, end in chunks:
-                    if merged_chunks and (end - start) < 5.0:
-                        prev_start, prev_end = merged_chunks[-1]
-                        merged_chunks[-1] = (prev_start, end)
-                    else:
-                        merged_chunks.append((start, end))
-                chunks = merged_chunks
-
-                if len(chunks) > len(raw_lines):
-                    merged_chunks = []
-                    for start, end in chunks:
-                        if len(merged_chunks) < len(raw_lines) - 1:
-                            merged_chunks.append((start, end))
-                        else:
-                            prev_start, prev_end = merged_chunks[-1]
-                            merged_chunks[-1] = (prev_start, end)
-                    chunks = merged_chunks
-
-                # Load audio once for slicing
-                y, sr = librosa.load(audio_path, sr=16000, mono=True)
-                audio_duration = len(y) / sr if sr else 0.0
-
-                line_lengths = [max(1, len(re.sub(r'\s+', '', line))) for line in raw_lines]
-                total_units = sum(line_lengths)
-                chunk_durations = [max(0.1, end - start) for start, end in chunks]
-                total_chunk_units = sum(chunk_durations)
-
-                # Assign lines to chunks proportionally by duration
-                assignments = []
-                line_index = 0
-                remaining_lines = len(raw_lines)
-                remaining_units = total_units
-                remaining_chunk_units = total_chunk_units
-                for idx, (start, end) in enumerate(chunks):
-                    if idx == len(chunks) - 1:
-                        count = remaining_lines
-                    else:
-                        target_units = remaining_units * (chunk_durations[idx] / remaining_chunk_units) if remaining_chunk_units > 0 else remaining_units
-                        acc_units = 0
-                        count = 0
-                        while line_index + count < len(raw_lines) and acc_units < target_units and (remaining_lines - count) > (len(chunks) - idx - 1):
-                            acc_units += line_lengths[line_index + count]
-                            count += 1
-                        if count == 0:
-                            count = 1
-
-                    assignments.append((start, end, line_index, line_index + count))
-                    used_units = sum(line_lengths[line_index:line_index + count])
-                    line_index += count
-                    remaining_lines -= count
-                    remaining_units -= used_units
-                    remaining_chunk_units -= chunk_durations[idx]
-
-                for start, end, start_line, end_line in assignments:
-                    chunk_lines = raw_lines[start_line:end_line]
-                    if not chunk_lines:
-                        continue
-                    chunk_text = _clean_text_for_mfa(" ".join(chunk_lines))
-                    if not chunk_text:
-                        continue
-
-                    chunk_start = max(0.0, start - 0.1)
-                    chunk_end = end + 0.1
-                    if audio_duration > 0:
-                        chunk_end = min(audio_duration, chunk_end)
-
-                    start_sample = int(chunk_start * sr)
-                    end_sample = int(chunk_end * sr)
-                    if end_sample <= start_sample:
-                        continue
-
-                    chunk_audio = y[start_sample:end_sample]
-                    temp_path = os.path.join(TEMP_DIR, f"mfa_chunk_{uuid.uuid4().hex}.wav")
-                    sf.write(temp_path, chunk_audio, sr)
-
-                    try:
-                        chunk_words = mfa_processor.align_lyrics(temp_path, chunk_text, language)
-                    finally:
-                        try:
-                            os.remove(temp_path)
-                        except OSError:
-                            pass
-
-                    if not chunk_words:
-                        raise RuntimeError("Chunked MFA alignment returned no words")
-
-                    for word in chunk_words:
-                        mfa_words.append({
-                            "start_time": round(word["start_time"] + chunk_start, 3),
-                            "end_time": round(word["end_time"] + chunk_start, 3),
-                            "text": word["text"],
-                        })
-
-                mfa_words.sort(key=lambda w: w["start_time"])
-                print(f"[MFA-only] Chunked alignment produced {len(mfa_words)} words across {len(chunks)} chunks")
-            except Exception as e:
-                print(f"[MFA-only] Chunked alignment failed: {e} — falling back to single pass")
-                mfa_words = []
-
-        if not mfa_words and mfa_processor.is_available() and language in mfa_processor.LANGUAGE_MODELS:
-            try:
-                clean_text = _clean_text_for_mfa(lyrics_text)
-                mfa_words = mfa_processor.align_lyrics(audio_path, clean_text, language)
-                print(f"[MFA-only] Aligned {len(mfa_words)} words (single pass)")
-            except Exception as e:
-                print(f"[MFA-only] Failed: {e}")
-
-        return self._build_lines_from_mfa_fallback(lyrics_text, mfa_words)
-
-    def _refine_with_mfa(self, lines: List[Dict], mfa_words: List[Dict]) -> List[Dict]:
-        """Average WhisperX and MFA timing for each word."""
-        mfa_idx = 0
-        for line in lines:
-            for word in line.get("words", []):
-                # Find matching MFA word by text similarity + time proximity
-                clean_w = re.sub(r'[^\w]', '', word["text"].lower())
-                for i in range(mfa_idx, min(mfa_idx + 20, len(mfa_words))):
-                    clean_m = re.sub(r'[^\w]', '', mfa_words[i]["text"].lower())
-                    if clean_w and clean_m and (clean_w == clean_m or clean_w in clean_m or clean_m in clean_w):
-                        # Average timing
-                        word["start_time"] = round((word["start_time"] + mfa_words[i]["start_time"]) / 2, 3)
-                        word["end_time"] = round((word["end_time"] + mfa_words[i]["end_time"]) / 2, 3)
-                        mfa_idx = i + 1
-                        break
-            # Update line timing from words
-            if line.get("words"):
-                line["start_time"] = line["words"][0]["start_time"]
-                line["end_time"] = max(w["end_time"] for w in line["words"])
-        return lines
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -941,19 +884,12 @@ class LyricsProcessor:
             lyrics_lines = self._map_api_to_whisperx_timing(lyrics_text, whisperx_segments)
             print(f"[Mapping] {len(lyrics_lines)} lines mapped to WhisperX timing")
         else:
-            print("[Mapping] WhisperX failed — using MFA-only timing")
-            lyrics_lines = self._build_lines_with_mfa_only(audio_path, lyrics_text, detected_language)
-            print(f"[Mapping] {len(lyrics_lines)} lines with MFA timing")
+            print("[Mapping] WhisperX failed — returning empty lyrics (no timing source)")
+            lyrics_lines = []
 
         if progress_callback:
             progress_callback(55)
 
-        # ==============================================================
-        # Stage 5: MFA Refinement — DISABLED
-        # ==============================================================
-        # Stage 5: MFA Refinement — DISABLED
-        # Single-pass MFA drifts on audio >60s and corrupts WhisperX timing
-        print("[Stage 5: MFA] Skipped — WhisperX timing is sufficient (single-pass MFA causes drift)")
 
         if progress_callback:
             progress_callback(60)
@@ -1017,80 +953,6 @@ class LyricsProcessor:
             "duration": duration,
         }
 
-    def _build_lines_from_mfa_fallback(self, lyrics_text: str, mfa_words: List[Dict]) -> List[Dict]:
-        """Build display lines from API text lines + MFA word timings (fallback path)."""
-        raw_lines = [line.strip() for line in lyrics_text.split("\n") if line.strip()]
-
-        if not mfa_words:
-            return [{
-                "start_time": 0,
-                "end_time": 0,
-                "text": line,
-                "words": []
-            } for line in raw_lines]
-
-        mfa_idx = 0
-        result_lines = []
-
-        for line_text in raw_lines:
-            line_words_text = line_text.split()
-            if not line_words_text:
-                continue
-
-            line_words = []
-
-            for word_text in line_words_text:
-                clean_word = re.sub(r'[^\w\s]', '', word_text).lower().strip()
-                if not clean_word:
-                    continue
-
-                matched = False
-                for i in range(mfa_idx, min(mfa_idx + 20, len(mfa_words))):
-                    mfa_word = mfa_words[i]
-                    mfa_clean = re.sub(r'[^\w\s]', '', mfa_word["text"]).lower().strip()
-
-                    if (mfa_clean == clean_word or
-                        mfa_clean.startswith(clean_word) or
-                        clean_word.startswith(mfa_clean) or
-                        mfa_clean in clean_word or
-                        clean_word in mfa_clean):
-                        line_words.append({
-                            "start_time": round(mfa_word["start_time"], 3),
-                            "end_time": round(mfa_word["end_time"], 3),
-                            "text": word_text,
-                        })
-                        mfa_idx = i + 1
-                        matched = True
-                        break
-
-                if not matched:
-                    if line_words:
-                        last_end = line_words[-1]["end_time"]
-                    elif result_lines:
-                        last_end = result_lines[-1]["end_time"] + 0.1
-                    else:
-                        last_end = 0.0
-
-                    line_words.append({
-                        "start_time": round(last_end, 3),
-                        "end_time": round(last_end + 0.3, 3),
-                        "text": word_text,
-                    })
-
-            if line_words:
-                line_words.sort(key=lambda w: w["start_time"])
-                line_start = line_words[0]["start_time"]
-                line_end = max(w["end_time"] for w in line_words)
-                if line_end < line_start:
-                    line_end = line_start + 1.0
-                result_lines.append({
-                    "start_time": line_start,
-                    "end_time": line_end,
-                    "text": line_text,
-                    "words": line_words,
-                })
-
-        return result_lines
 
 
 # Singleton - keep old name as alias for backward compatibility
