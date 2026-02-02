@@ -11,6 +11,11 @@ from src.processors.separator_processor import separator_processor
 from src.processors.whisper_processor import lyrics_processor as whisper_processor
 from src.processors.crepe_processor import crepe_processor
 
+# Validate required environment variables at module load time
+PROCESSING_SECRET = os.environ.get('PROCESSING_SECRET')
+if not PROCESSING_SECRET:
+    raise EnvironmentError("PROCESSING_SECRET environment variable is required")
+
 
 def sanitize_folder_name(name: str) -> str:
     name = re.sub(r'[<>:"/\\|?*]', '', name)
@@ -207,7 +212,7 @@ class AIWorker:
             
             url = f"{BACKEND_API_URL}/api/songs/{song_id}/processing-callback"
             headers = {
-                "x-processing-secret": os.environ.get('PROCESSING_SECRET', '***REDACTED_PROCESSING_SECRET***')
+                "x-processing-secret": PROCESSING_SECRET
             }
             response = requests.post(url, json=callback_data, headers=headers, timeout=30)
             

@@ -94,6 +94,13 @@ RUN python -c "from audio_separator.separator import Separator; s = Separator();
 
 COPY src/ ./src/
 
+# Create non-root user
+RUN groupadd --system --gid 1001 appgroup && \
+    useradd --system --uid 1001 --gid appgroup appuser && \
+    chown -R appuser:appgroup /app
+
+USER appuser
+
 ENV PYTHONUNBUFFERED=1
 
 CMD ["python", "-m", "src.worker"]

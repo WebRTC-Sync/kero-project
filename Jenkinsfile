@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     environment {
-        GPU_SERVER = '***REDACTED_GPU_IP***'
+        GPU_SERVER = credentials('gpu-server-host')
         GPU_SSH_KEY = '/var/lib/jenkins/.ssh/gpu_key'
     }
     
@@ -10,15 +10,15 @@ pipeline {
         stage('Pull Latest Code') {
             steps {
                 sh '''
-                    sudo git config --global --add safe.directory /home/ubuntu/project
+                    git config --global --add safe.directory /home/ubuntu/project
                     cd /home/ubuntu/project
                     
                     if [ -f backend/.env ]; then
                         cp backend/.env /tmp/backend.env.backup
                     fi
                     
-                    sudo git fetch origin
-                    sudo git reset --hard origin/main
+                    git fetch origin
+                    git reset --hard origin/main
                     
                     if [ -f /tmp/backend.env.backup ]; then
                         cp /tmp/backend.env.backup backend/.env
@@ -31,8 +31,8 @@ pipeline {
             steps {
                 sh '''
                     cd /home/ubuntu/project
-                    sudo docker compose down || true
-                    sudo docker compose up -d --build
+                    docker compose down || true
+                    docker compose up -d --build
                 '''
             }
         }
@@ -41,27 +41,27 @@ pipeline {
             steps {
                 sh '''
                     # Sync ai-worker code to GPU server (excluding .env)
-                    rsync -avz --exclude=".env" -e "ssh -i ${GPU_SSH_KEY} -o StrictHostKeyChecking=no" \
+                    rsync -avz --exclude=".env" -e "ssh -i ${GPU_SSH_KEY} -o StrictHostKeyChecking=accept-new" \
                         /home/ubuntu/project/ai-worker/ ubuntu@${GPU_SERVER}:/data/kero/ai-worker/
                     
                     # Restart AI Worker on GPU server
-                    ssh -i ${GPU_SSH_KEY} -o StrictHostKeyChecking=no ubuntu@${GPU_SERVER} '
+                    ssh -i ${GPU_SSH_KEY} -o StrictHostKeyChecking=accept-new ubuntu@${GPU_SERVER} '
                         cd /data/kero/ai-worker
                         
                         # Rebuild and restart with Docker
-                        sudo docker compose down || true
-                        sudo docker compose up -d --build
+                        docker compose down || true
+                        docker compose up -d --build
                         
                         echo "Waiting for AI Worker to start..."
                         sleep 20
                         
                         # Check if container is running
-                        if sudo docker compose ps | grep -q "Up"; then
+                        if docker compose ps | grep -q "Up"; then
                             echo "AI Worker is running"
-                            sudo docker compose ps
+                            docker compose ps
                         else
                             echo "AI Worker startup logs:"
-                            sudo docker compose logs --tail=20
+                            docker compose logs --tail=20
                         fi
                     '
                 '''
@@ -72,8 +72,8 @@ pipeline {
             steps {
                 sh '''
                     sleep 30
-                    curl -f -k https://kero.ooo || exit 1
-                    curl -f -k https://kero.ooo/api/health || echo "Backend health check skipped"
+                    curl -f https://kero.ooo || exit 1
+                    curl -f https://kero.ooo/api/health || echo "Backend health check skipped"
                     echo "Main server health check passed!"
                 '''
             }
@@ -81,7 +81,7 @@ pipeline {
         
         stage('Cleanup') {
             steps {
-                sh 'sudo docker image prune -f'
+                sh 'docker image prune -f'
             }
         }
     }

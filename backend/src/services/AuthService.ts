@@ -23,24 +23,28 @@ export class AuthService {
   }
 
   async login(email: string, password: string): Promise<{ user: User; token: string }> {
-    const user = await userRepository.findOne({ where: { email } });
-    if (!user) {
-      throw new Error("사용자를 찾을 수 없습니다.");
-    }
+     const user = await userRepository.findOne({ where: { email } });
+     if (!user) {
+       throw new Error("사용자를 찾을 수 없습니다.");
+     }
 
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) {
-      throw new Error("비밀번호가 일치하지 않습니다.");
-    }
+     const isValid = await bcrypt.compare(password, user.password);
+     if (!isValid) {
+       throw new Error("비밀번호가 일치하지 않습니다.");
+     }
 
-    const token = jwt.sign(
-      { userId: user.id },
-      process.env.JWT_SECRET || "secret",
-      { expiresIn: "7d" }
-    );
+     if (!process.env.JWT_SECRET) {
+       throw new Error("JWT_SECRET environment variable is required");
+     }
 
-    return { user, token };
-  }
+     const token = jwt.sign(
+       { userId: user.id },
+       process.env.JWT_SECRET,
+       { expiresIn: "7d" }
+     );
+
+     return { user, token };
+   }
 
   async getUserById(id: string): Promise<User | null> {
     return userRepository.findOne({ where: { id } });

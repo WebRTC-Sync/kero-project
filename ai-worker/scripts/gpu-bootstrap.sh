@@ -26,22 +26,24 @@ set -euo pipefail
 echo "=== GPU Server Bootstrap ==="
 echo "[$(date)] Starting bootstrap..."
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # ─── 1. SSH Keys Setup ───────────────────────────────────────────────────────
 echo ">>> Setting up SSH keys in /data..."
 mkdir -p /data/ssh-setup
 
-cat > /data/ssh-setup/authorized_keys << 'KEYS'
-# Kero GPU access key
-ssh-ed25519 ***REDACTED_SSH_KEY*** kero-gpu
-# GPU server deploy key
-ssh-ed25519 ***REDACTED_SSH_KEY*** gpu-server
-# Jenkins RSA deploy key — add the public key manually:
-#   On main server: ssh-keygen -y -f /var/lib/jenkins/.ssh/gpu_key >> /data/ssh-setup/authorized_keys
-KEYS
+if [ -f "${SCRIPT_DIR}/authorized_keys" ]; then
+    cp "${SCRIPT_DIR}/authorized_keys" /data/ssh-setup/authorized_keys
+    echo ">>> SSH keys copied from ${SCRIPT_DIR}/authorized_keys"
+else
+    echo ">>> WARNING: No authorized_keys file found at ${SCRIPT_DIR}/authorized_keys"
+    echo ">>> Create this file with your SSH public keys before running bootstrap."
+    echo ">>> Example: ssh-ed25519 AAAA... user@host"
+    touch /data/ssh-setup/authorized_keys
+fi
 
 # ─── 2. Copy boot-restore script to /data ────────────────────────────────────
 echo ">>> Installing boot-restore script to /data..."
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/gpu-boot-restore.sh" ]; then
     cp "$SCRIPT_DIR/gpu-boot-restore.sh" /data/boot-restore.sh
 else
@@ -116,6 +118,8 @@ echo ">>> systemd service enabled"
 # ─── 4. Install Docker if not present ────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
     echo ">>> Installing Docker..."
+    # NOTE: Piping to sh is a security risk. In production, use your distro's package manager.
+    # For Ubuntu: apt-get install -y docker-ce docker-ce-cli containerd.io
     curl -fsSL https://get.docker.com | sh
     usermod -aG docker ubuntu
     echo ">>> Docker installed"
@@ -161,8 +165,8 @@ echo "     ssh-keygen -y -f /var/lib/jenkins/.ssh/gpu_key >> /data/ssh-setup/aut
 echo "     Then re-run: cp /data/ssh-setup/authorized_keys /home/ubuntu/.ssh/authorized_keys"
 echo ""
 echo "  2. Test SSH access:"
-echo "     ssh -i ~/.ssh/gpu-server ubuntu@***REDACTED_GPU_IP***"
+echo "     ssh -i ~/.ssh/gpu-server ubuntu@<GPU_SERVER_IP>"
 echo ""
 echo "  3. Deploy AI worker (Jenkins will do this automatically, or manually):"
-echo "     rsync ai-worker/ ubuntu@***REDACTED_GPU_IP***:/data/kero/ai-worker/"
-echo "     ssh ubuntu@***REDACTED_GPU_IP*** 'cd /data/kero/ai-worker && docker compose up -d --build'"
+echo "     rsync ai-worker/ ubuntu@<GPU_SERVER_IP>:/data/kero/ai-worker/"
+echo "     ssh ubuntu@<GPU_SERVER_IP> 'cd /data/kero/ai-worker && docker compose up -d --build'"

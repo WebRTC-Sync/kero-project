@@ -5,6 +5,10 @@ export interface AuthRequest extends Request {
   userId?: string;
 }
 
+const JWT_SECRET: string = process.env.JWT_SECRET || (() => {
+  throw new Error("FATAL: JWT_SECRET environment variable is not set");
+})();
+
 export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
@@ -14,7 +18,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret") as { userId: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as unknown as { userId: string };
     req.userId = decoded.userId;
     next();
   } catch (error) {

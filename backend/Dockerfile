@@ -11,6 +11,12 @@ RUN npm ci --only=production
 COPY . .
 RUN npm run build
 
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 appuser && \
+    chown -R appuser:nodejs /app
+
+USER appuser
+
 EXPOSE 4000
 
 CMD ["node", "dist/app.js"]

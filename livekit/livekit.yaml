@@ -3,10 +3,10 @@ rtc:
   port_range_start: 7882
   port_range_end: 7892
   tcp_port: 7881
-  node_ip: ***REDACTED_SERVER_IP***
+  node_ip: CHANGE_ME
 
 keys:
-  ***REDACTED_LIVEKIT_KEY***: ***REDACTED_LIVEKIT_SECRET***
+  CHANGE_ME_API_KEY: CHANGE_ME_API_SECRET
 
 logging:
   level: info

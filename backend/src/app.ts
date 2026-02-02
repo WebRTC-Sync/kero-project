@@ -42,16 +42,16 @@ app.post("/api/online/heartbeat", async (req, res) => {
       return res.status(400).json({ success: false, message: "visitorId required" });
     }
     
-    // Try to extract userId from JWT if present
-    let userId: string | undefined;
-    const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1];
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret") as { userId: string };
-        userId = decoded.userId;
-      } catch {}
-    }
+     // Try to extract userId from JWT if present
+     let userId: string | undefined;
+     const authHeader = req.headers["authorization"];
+     const token = authHeader && authHeader.split(" ")[1];
+     if (token) {
+       try {
+         const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+         userId = decoded.userId;
+       } catch {}
+     }
     
     const key = `online:${userId || visitorId}`;
     const data = { visitorId, userId, nickname, profileImage, currentPage, lastSeen: Date.now() };

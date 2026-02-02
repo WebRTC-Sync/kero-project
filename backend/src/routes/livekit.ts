@@ -3,8 +3,12 @@ import { AccessToken } from "livekit-server-sdk";
 
 const router = Router();
 
-const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "***REDACTED_LIVEKIT_KEY***";
-const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "***REDACTED_LIVEKIT_SECRET***";
+if (!process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET) {
+  throw new Error("LIVEKIT_API_KEY and LIVEKIT_API_SECRET environment variables are required");
+}
+
+const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
+const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 
 router.post("/token", async (req: Request, res: Response) => {
   try {
