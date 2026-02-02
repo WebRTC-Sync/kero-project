@@ -260,7 +260,7 @@ class LyricsProcessor:
                     decoder_mode="local_argmax",
                     threshold=0.006,
                     f0_min=65,
-                    f0_max=1047,
+                    f0_max=987.77,
                     interp_uv=False,
                 )
                 
