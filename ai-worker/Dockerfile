@@ -66,11 +66,12 @@ RUN curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-stati
 # Install uv package manager
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Install Deno
-RUN curl -fsSL https://deno.land/install.sh | sh && \
-    ln -s /root/.deno/bin/deno /usr/local/bin/deno
-ENV DENO_INSTALL="/root/.deno"
-ENV PATH="${DENO_INSTALL}/bin:${PATH}"
+# Install Deno (to shared location accessible by non-root user)
+ENV DENO_INSTALL="/opt/deno"
+RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/opt/deno sh && \
+    chmod -R a+rx /opt/deno && \
+    ln -sf /opt/deno/bin/deno /usr/local/bin/deno
+ENV PATH="/opt/deno/bin:${PATH}"
 
 # Set up Python environment
 ENV UV_PROJECT_ENVIRONMENT=/app/venv
