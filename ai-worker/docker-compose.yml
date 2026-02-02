@@ -30,6 +30,9 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-northeast-2}
       - S3_BUCKET=${S3_BUCKET:-kero-audio-bucket}
+      - PROCESSING_SECRET=${PROCESSING_SECRET}
+      - BACKEND_API_URL=${BACKEND_API_URL:-https://kero.ooo}
+      - TEMP_DIR=${TEMP_DIR:-/tmp/kero-ai}
     logging:
       driver: json-file
       options:
