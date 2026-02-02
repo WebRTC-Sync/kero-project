@@ -69,8 +69,8 @@ services:
     networks:
       - kero-network
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
-    expose:
-      - "6379"
+    ports:
+      - "6379:6379"
     volumes:
       - redis_data:/data
     logging:
@@ -85,9 +85,9 @@ services:
     restart: unless-stopped
     networks:
       - kero-network
-    expose:
-      - "5672"
-      - "15672"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-kero}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
