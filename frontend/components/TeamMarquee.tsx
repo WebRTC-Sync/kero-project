@@ -10,9 +10,9 @@ export default function TeamMarquee() {
   return (
     <SectionWrapper
       id="team"
-      className="w-full py-12 sm:py-16 md:py-24 overflow-hidden bg-black/90"
+      className="w-full py-12 sm:py-16 md:py-24 overflow-hidden bg-black/80 backdrop-blur-sm"
     >
-      <div className="absolute inset-0 bg-white/5 backdrop-blur-xl" />
+      <div className="absolute inset-0 bg-white/5 backdrop-blur-sm" />
       
       <div className="relative z-10 flex flex-col items-center gap-8">
         <RevealAnimation>
