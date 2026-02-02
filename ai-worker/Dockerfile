@@ -95,10 +95,11 @@ RUN python -c "from audio_separator.separator import Separator; s = Separator();
 
 COPY src/ ./src/
 
-# Create non-root user
+# Create non-root user with writable home directory
 RUN groupadd --system --gid 1001 appgroup && \
-    useradd --system --uid 1001 --gid appgroup appuser && \
+    useradd --system --uid 1001 --gid appgroup --create-home --home-dir /home/appuser appuser && \
     chown -R appuser:appgroup /app
+ENV HOME=/home/appuser
 
 USER appuser
 

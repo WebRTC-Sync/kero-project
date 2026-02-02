@@ -49,10 +49,10 @@ class SeparatorProcessor:
             ]
 
             for output_file in output_files:
-                filename = os.path.basename(output_file)
-                if "Vocals" in filename:
+                filename = os.path.basename(output_file).lower()
+                if "vocal" in filename:
                     source_key = "vocals"
-                elif "Instrumental" in filename:
+                elif "instrumental" in filename or "other" in filename:
                     source_key = "instrumental"
                 else:
                     continue
