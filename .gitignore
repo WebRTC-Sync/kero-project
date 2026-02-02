@@ -54,3 +54,4 @@ backend/cookies/
 # LiveKit config (contains secrets)
 livekit/livekit.yaml
 !livekit/livekit.yaml.example
+ai-worker/scripts/authorized_keys
