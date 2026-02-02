@@ -12,6 +12,8 @@ import SkillsSection from "@/components/3d/SkillsSection";
 import SmoothScroll from "@/components/animations/SmoothScroll";
 import Particles from "@/components/effects/Particles";
 import ShootingStars from "@/components/effects/ShootingStars";
+import ElasticCursor from "@/components/effects/ElasticCursor";
+import RadialMenu from "@/components/effects/RadialMenu";
 
 export default function Home() {
   return (
@@ -33,6 +35,8 @@ export default function Home() {
         <FAQ />
         <Footer />
       </main>
+      <ElasticCursor />
+      <RadialMenu />
     </SmoothScroll>
   );
 }

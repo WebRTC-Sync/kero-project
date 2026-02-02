@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
+  --background: #020817;
   --foreground: #ededed;
 }
 
@@ -23,7 +23,7 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0a0a0a;
+  background: #020817;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -37,5 +37,11 @@ body {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #C0C0C0 #0a0a0a;
+  scrollbar-color: #C0C0C0 #020817;
+}
+
+@media (min-width: 769px) {
+  * {
+    cursor: none !important;
+  }
 }
