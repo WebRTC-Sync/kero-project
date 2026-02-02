@@ -4,7 +4,7 @@ import React, { Suspense, useEffect, useRef, useState } from "react";
 import { Application, SPEObject, SplineEvent } from "@splinetool/runtime";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 const Spline = React.lazy(() => import("@splinetool/react-spline"));
 
@@ -43,10 +43,6 @@ const KeyboardShowcase = () => {
       if (selectedSkillRef.current) playReleaseSound();
       setSelectedSkill(null);
       selectedSkillRef.current = null;
-      try {
-        splineApp.setVariable("heading", "");
-        splineApp.setVariable("desc", "");
-      } catch {}
     } else {
       if (!selectedSkillRef.current || selectedSkillRef.current.name !== e.target.name) {
         const skill = SKILLS[e.target.name as SkillNames];
@@ -71,10 +67,6 @@ const KeyboardShowcase = () => {
     splineApp.addEventListener("keyUp", () => {
       if (!splineApp || isInputFocused()) return;
       playReleaseSound();
-      try {
-        splineApp.setVariable("heading", "");
-        splineApp.setVariable("desc", "");
-      } catch {}
     });
 
     splineApp.addEventListener("keyDown", (e) => {
@@ -84,10 +76,6 @@ const KeyboardShowcase = () => {
         playPressSound();
         setSelectedSkill(skill);
         selectedSkillRef.current = skill;
-        try {
-          splineApp.setVariable("heading", skill.label);
-          splineApp.setVariable("desc", skill.shortDescription);
-        } catch {}
       }
     });
 
@@ -230,10 +218,10 @@ const KeyboardShowcase = () => {
     const textDesktopDark = splineApp.findObjectByName("text-desktop-dark");
     const textMobileDark = splineApp.findObjectByName("text-mobile-dark");
     const textMobileLight = splineApp.findObjectByName("text-mobile");
-    if (textDesktopLight) textDesktopLight.visible = !isMobile;
+    if (textDesktopLight) textDesktopLight.visible = false;
     if (textDesktopDark) textDesktopDark.visible = false;
     if (textMobileDark) textMobileDark.visible = false;
-    if (textMobileLight) textMobileLight.visible = isMobile;
+    if (textMobileLight) textMobileLight.visible = false;
 
     // Phase 2: Bongo cat — keyboard flips, bongo cat appears
     ScrollTrigger.create({
@@ -246,13 +234,6 @@ const KeyboardShowcase = () => {
         if (isMobile) {
           gsap.to(kbd.position, { y: 150, duration: 1 });
         }
-        // hide text in bongo phase
-        if (textDesktopLight) textDesktopLight.visible = false;
-        if (textMobileLight) textMobileLight.visible = false;
-        try {
-          splineApp.setVariable("heading", "");
-          splineApp.setVariable("desc", "");
-        } catch {}
         setTimeout(() => bongoAnimationRef.current?.start(), 400);
       },
       onLeaveBack: () => {
@@ -260,8 +241,6 @@ const KeyboardShowcase = () => {
         bongoAnimationRef.current?.stop();
         gsap.to(kbd.rotation, { x: 0, y: Math.PI / 12, z: 0, duration: 1.2, ease: "power2.inOut" });
         gsap.to(kbd.position, { x: 0, y: -40, z: 0, duration: 1 });
-        if (textDesktopLight) textDesktopLight.visible = !isMobile;
-        if (textMobileLight) textMobileLight.visible = isMobile;
       },
     });
 
@@ -307,15 +286,6 @@ const KeyboardShowcase = () => {
     revealKeyboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [splineApp]);
-
-  // Update Spline variables when skill selected
-  useEffect(() => {
-    if (!selectedSkill || !splineApp) return;
-    try {
-      splineApp.setVariable("heading", selectedSkill.label);
-      splineApp.setVariable("desc", selectedSkill.shortDescription);
-    } catch {}
-  }, [selectedSkill, splineApp]);
 
   return (
     <section ref={sectionRef} className="relative bg-black" style={{ height: "400vh" }}>
@@ -373,6 +343,34 @@ const KeyboardShowcase = () => {
         </div>
 
         {/* Scroll progress indicator */}
+        <AnimatePresence>
+          {phase === "skills" && selectedSkill && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4"
+            >
+              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/60 backdrop-blur-xl px-6 py-4 shadow-2xl">
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-1.5"
+                  style={{ backgroundColor: selectedSkill.color }}
+                />
+                
+                <div className="pl-2">
+                  <h3 className="text-2xl font-bold text-white mb-1">
+                    {selectedSkill.label}
+                  </h3>
+                  <p className="text-white/70 text-sm leading-relaxed">
+                    {selectedSkill.shortDescription}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-3 z-10">
           {(["skills", "bongo", "teardown"] as Phase[]).map((p) => (
             <div
