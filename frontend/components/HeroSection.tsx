@@ -148,35 +148,37 @@ export default function HeroSection() {
      return () => window.removeEventListener('wheel', handleWheel, { capture: true });
    }, [handleWheel]);
 
-   useEffect(() => {
-     const handleKeyboardIntroWheel = (e: WheelEvent) => {
-       if (!hasExitedHero) return;
-       
-       const heroHeight = containerRef.current?.offsetHeight || window.innerHeight;
-       const scrollY = window.scrollY;
-       
-       if (scrollY > 0 && scrollY < heroHeight + 200) {
-         if (e.deltaY < 0) {
-           const now = Date.now();
-           if (now - lastScrollTime.current < 500) return;
-           lastScrollTime.current = now;
-           
-           e.preventDefault();
-           
-           setActiveMode(0);
-           setHasExitedHero(false);
-           setIsReadyToScroll(false);
-           
-           if (lenis) {
-             lenis.scrollTo(0, { duration: 0.8 });
-           }
-         }
-       }
-     };
-     
-     window.addEventListener('wheel', handleKeyboardIntroWheel, { passive: false });
-     return () => window.removeEventListener('wheel', handleKeyboardIntroWheel);
-   }, [hasExitedHero, lenis]);
+    useEffect(() => {
+      const handleKeyboardIntroWheel = (e: WheelEvent) => {
+        if (!hasExitedHero) return;
+        
+        const heroHeight = containerRef.current?.offsetHeight || window.innerHeight;
+        const scrollY = window.scrollY;
+        
+        // Trigger zone: from just below hero (50px) to 1.5x hero height
+        const inTriggerZone = scrollY > 50 && scrollY < heroHeight * 1.5;
+        
+        if (inTriggerZone && e.deltaY < -30) { // Significant upward scroll
+          const now = Date.now();
+          if (now - lastScrollTime.current < 200) return; // Reduced debounce
+          lastScrollTime.current = now;
+          
+          e.preventDefault();
+          e.stopPropagation();
+          
+          setActiveMode(0);
+          setHasExitedHero(false);
+          setIsReadyToScroll(false);
+          
+          if (lenis) {
+            lenis.scrollTo(0, { duration: 0.8 });
+          }
+        }
+      };
+      
+      window.addEventListener('wheel', handleKeyboardIntroWheel, { passive: false, capture: true });
+      return () => window.removeEventListener('wheel', handleKeyboardIntroWheel, { capture: true });
+    }, [hasExitedHero, lenis]);
 
    const currentMode = modes[activeMode];
   const Icon = currentMode.icon;
