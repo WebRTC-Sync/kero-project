@@ -109,11 +109,11 @@ export default function HeroSection() {
 
   const scrollToContent = useCallback(() => {
     const heroHeight = containerRef.current?.offsetHeight || window.innerHeight;
+    hasExitedHeroRef.current = true;
+    setHasExitedHero(true);
     if (lenis) {
       lenis.start();
-      setTimeout(() => {
-        lenis.scrollTo(heroHeight, { duration: 1.2 });
-      }, 50);
+      lenis.scrollTo(heroHeight, { duration: 1.2 });
     } else {
       window.scrollTo({ top: heroHeight, behavior: 'smooth' });
     }
