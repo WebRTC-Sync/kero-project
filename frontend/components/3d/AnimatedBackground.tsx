@@ -58,28 +58,29 @@ const AnimatedBackground = () => {
 
   // --- Event Handlers ---
 
-  const handleMouseHover = (e: SplineEvent) => {
-    if (!splineApp || activeSectionRef.current !== "skills") return;
-    if (selectedSkillRef.current?.name === e.target.name) return;
+   const handleMouseHover = (e: SplineEvent) => {
+     if (!splineApp || selectedSkillRef.current?.name === e.target.name) return;
 
-    if (e.target.name === "body" || e.target.name === "platform") {
-      if (selectedSkillRef.current) playReleaseSound();
-      setSelectedSkill(null);
-      selectedSkillRef.current = null;
-      splineApp.setVariable("heading", "");
-      splineApp.setVariable("desc", "");
-    } else {
-      const skill = findSkillFromObject(e.target);
-      if (skill && (!selectedSkillRef.current || selectedSkillRef.current.name !== skill.name)) {
-        if (selectedSkillRef.current) playReleaseSound();
-        playPressSound();
-        setSelectedSkill(skill);
-        selectedSkillRef.current = skill;
-        splineApp.setVariable("heading", skill.label);
-        splineApp.setVariable("desc", skill.shortDescription);
-      }
-    }
-  };
+     if (e.target.name === "body" || e.target.name === "platform") {
+       if (selectedSkillRef.current) playReleaseSound();
+       setSelectedSkill(null);
+       selectedSkillRef.current = null;
+       if (splineApp.getVariable("heading") && splineApp.getVariable("desc")) {
+         splineApp.setVariable("heading", "");
+         splineApp.setVariable("desc", "");
+       }
+     } else {
+       const skill = findSkillFromObject(e.target);
+       if (skill && (!selectedSkillRef.current || selectedSkillRef.current.name !== skill.name)) {
+         if (selectedSkillRef.current) playReleaseSound();
+         playPressSound();
+         setSelectedSkill(skill);
+         selectedSkillRef.current = skill;
+         splineApp.setVariable("heading", skill.label);
+         splineApp.setVariable("desc", skill.shortDescription);
+       }
+     }
+   };
 
   const handleSplineInteractions = () => {
     if (!splineApp) return;
@@ -94,13 +95,15 @@ const AnimatedBackground = () => {
       );
     };
 
-    splineApp.addEventListener("keyUp", () => {
-      if (!splineApp || isInputFocused() || activeSectionRef.current !== "skills") return;
-      playReleaseSound();
-    });
+     splineApp.addEventListener("keyUp", () => {
+       if (!splineApp || isInputFocused()) return;
+       playReleaseSound();
+       splineApp.setVariable("heading", "");
+       splineApp.setVariable("desc", "");
+     });
 
-    splineApp.addEventListener("keyDown", (e) => {
-      if (!splineApp || isInputFocused() || activeSectionRef.current !== "skills") return;
+     splineApp.addEventListener("keyDown", (e) => {
+       if (!splineApp || isInputFocused()) return;
       const skill = findSkillFromObject(e.target);
       if (skill) {
         playPressSound();
@@ -111,20 +114,8 @@ const AnimatedBackground = () => {
       }
     });
 
-    splineApp.addEventListener("mouseHover", handleMouseHover);
-
-    splineApp.addEventListener("mouseDown", (e) => {
-      if (!splineApp || activeSectionRef.current !== "skills") return;
-      const skill = findSkillFromObject(e.target);
-      if (skill) {
-        playPressSound();
-        setSelectedSkill(skill);
-        selectedSkillRef.current = skill;
-        splineApp.setVariable("heading", skill.label);
-        splineApp.setVariable("desc", skill.shortDescription);
-      }
-    });
-  };
+     splineApp.addEventListener("mouseHover", handleMouseHover);
+   };
 
   // --- Animation Setup Helpers ---
 
