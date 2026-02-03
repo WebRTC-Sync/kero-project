@@ -71,7 +71,7 @@ export default function HeroSection() {
         setHasExitedHero(true);
       }
       
-      if (hasExitedHeroRef.current && scrollingUp && scroll < heroHeight * 1.15) {
+      if (hasExitedHeroRef.current && scrollingUp && scroll < heroHeight * 1.9) {
         isSnapping = true;
         hasExitedHeroRef.current = false;
         setHasExitedHero(false);
