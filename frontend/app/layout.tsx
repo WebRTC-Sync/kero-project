@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import PresenceProvider from "@/components/PresenceProvider";
 import { ReduxProvider } from "@/store/provider";
 import { Toaster } from "sonner";
+import ElasticCursor from "@/components/effects/ElasticCursor";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,6 +33,7 @@ export default function RootLayout({
             },
           }}
         />
+        <ElasticCursor />
       </body>
     </html>
   );
