@@ -412,10 +412,12 @@ const AnimatedBackground = () => {
       if (activeSection === "hero") {
         rotateKeyboard?.pause();
         teardownKeyboard?.pause();
+      } else if (activeSection === "cta" || activeSection === "faq") {
+        rotateKeyboard?.pause();
       } else {
-       rotateKeyboard?.pause();
-         teardownKeyboard?.pause();
-       }
+        rotateKeyboard?.play();
+        teardownKeyboard?.pause();
+      }
 
        if (activeSection === "features") {
         await sleep(300);
