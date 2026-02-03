@@ -71,9 +71,7 @@ export default function HeroSection() {
   useEffect(() => {
     if (!lenis) return;
     
-    const isLastMode = activeMode === modes.length - 1;
-    
-    if (hasExitedHero || (isLastMode && isReadyToScroll)) {
+    if (hasExitedHero) {
       lenis.start();
     } else {
       lenis.stop();
@@ -82,7 +80,7 @@ export default function HeroSection() {
     return () => {
       lenis.start();
     };
-  }, [lenis, hasExitedHero, activeMode, isReadyToScroll]);
+  }, [lenis, hasExitedHero]);
 
   const scrollToContent = useCallback(() => {
     const heroHeight = containerRef.current?.offsetHeight || window.innerHeight;
