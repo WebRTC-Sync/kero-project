@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import confetti from "canvas-confetti";
 import RadialMenuPresentational from "./RadialMenuPresentational";
 import { MenuItem, Position } from "./radial-menu-types";
+import { usePresence } from "../PresenceProvider";
 
 const MENU_ITEMS: MenuItem[] = [
   { id: "love", emoji: "\u2764\uFE0F", label: "Love", color: "#ef4444" },
@@ -18,6 +19,7 @@ const DEAD_ZONE = 20;
 const HOLD_DELAY = 0;
 
 export default function RadialMenu() {
+  const { emitEmoji } = usePresence();
   const [isOpen, setIsOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<Position>({ x: 0, y: 0 });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -100,6 +102,7 @@ export default function RadialMenu() {
       if (activeIndexRef.current !== null) {
         const item = MENU_ITEMS[activeIndexRef.current];
         fireConfetti(e.pageX, e.pageY, item.emoji);
+        emitEmoji(item.emoji, e.pageX, e.pageY);
       }
       setIsOpen(false);
       setActiveIndex(null);

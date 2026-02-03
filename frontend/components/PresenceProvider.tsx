@@ -17,6 +17,13 @@ interface OnlineUser {
   color: string;
 }
 
+export interface EmojiData {
+  socketId: string;
+  emoji: string;
+  x: number;
+  y: number;
+}
+
 interface PresenceData {
   count: number;
   users: OnlineUser[];
@@ -24,9 +31,17 @@ interface PresenceData {
 
 interface PresenceContextType extends PresenceData {
   socketId: string | null;
+  emitEmoji: (emoji: string, x: number, y: number) => void;
+  registerEmojiListener: (callback: (data: EmojiData) => void) => () => void;
 }
 
-const PresenceContext = createContext<PresenceContextType>({ count: 0, users: [], socketId: null });
+const PresenceContext = createContext<PresenceContextType>({ 
+  count: 0, 
+  users: [], 
+  socketId: null,
+  emitEmoji: () => {},
+  registerEmojiListener: () => () => {},
+});
 
 export function usePresence() {
   return useContext(PresenceContext);
@@ -52,7 +67,21 @@ export default function PresenceProvider({ children }: { children: React.ReactNo
   const [socketId, setSocketId] = useState<string | null>(null);
   const pathname = usePathname();
   const socketRef = useRef<Socket | null>(null);
+  const emojiListenersRef = useRef<((data: EmojiData) => void)[]>([]);
   const { x, y } = useMouse({ allowPage: true });
+
+  const emitEmoji = useCallback((emoji: string, x: number, y: number) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit("emoji:send", { emoji, x, y });
+    }
+  }, []);
+
+  const registerEmojiListener = useCallback((callback: (data: EmojiData) => void) => {
+    emojiListenersRef.current.push(callback);
+    return () => {
+      emojiListenersRef.current = emojiListenersRef.current.filter((cb) => cb !== callback);
+    };
+  }, []);
 
   const handleCursorMove = useCallback((posX: number, posY: number) => {
     if (socketRef.current?.connected) {
@@ -107,6 +136,10 @@ export default function PresenceProvider({ children }: { children: React.ReactNo
       });
     });
 
+    socket.on("emoji:broadcast", (data: EmojiData) => {
+      emojiListenersRef.current.forEach((listener) => listener(data));
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -119,7 +152,7 @@ export default function PresenceProvider({ children }: { children: React.ReactNo
   }, [pathname]);
 
   return (
-    <PresenceContext.Provider value={{ ...data, socketId }}>
+    <PresenceContext.Provider value={{ ...data, socketId, emitEmoji, registerEmojiListener }}>
       {children}
     </PresenceContext.Provider>
   );

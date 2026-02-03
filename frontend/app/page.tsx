@@ -13,7 +13,6 @@ import FeaturesSection from "@/components/FeaturesSection";
 import SmoothScroll from "@/components/animations/SmoothScroll";
 import Particles from "@/components/effects/Particles";
 import ShootingStars from "@/components/effects/ShootingStars";
-import RadialMenu from "@/components/effects/RadialMenu";
 import { PreloaderProvider } from "@/hooks/use-preloader";
 import Preloader from "@/components/Preloader";
 
@@ -46,7 +45,6 @@ export default function Home() {
           <FAQ />
            <Footer />
          </main>
-         <RadialMenu />
       </PreloaderProvider>
     </SmoothScroll>
   );

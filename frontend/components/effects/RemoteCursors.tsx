@@ -1,13 +1,28 @@
 "use client";
 
-import { usePresence } from "../PresenceProvider";
+import { useState, useEffect } from "react";
+import { usePresence, EmojiData } from "../PresenceProvider";
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { MousePointer2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+interface RemoteEmoji extends EmojiData {
+  id: string;
+}
+
 export default function RemoteCursors() {
-  const { users, socketId } = usePresence();
+  const { users, socketId, registerEmojiListener } = usePresence();
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const [remoteEmojis, setRemoteEmojis] = useState<RemoteEmoji[]>([]);
+
+  useEffect(() => {
+    return registerEmojiListener((data) => {
+      setRemoteEmojis((prev) => [
+        ...prev,
+        { ...data, id: Math.random().toString(36).substr(2, 9) },
+      ]);
+    });
+  }, [registerEmojiListener]);
 
   if (isMobile) return null;
 
@@ -62,6 +77,24 @@ export default function RemoteCursors() {
               </motion.div>
             </motion.div>
           ))}
+      </AnimatePresence>
+      <AnimatePresence>
+        {remoteEmojis.map((re) => (
+          <motion.div
+            key={re.id}
+            initial={{ opacity: 1, scale: 0, y: 0 }}
+            animate={{ opacity: 0, scale: 2, y: -50 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1, ease: "easeOut" }}
+            className="absolute text-4xl pointer-events-none select-none z-[10000]"
+            style={{ left: re.x, top: re.y }}
+            onAnimationComplete={() =>
+              setRemoteEmojis((prev) => prev.filter((e) => e.id !== re.id))
+            }
+          >
+            {re.emoji}
+          </motion.div>
+        ))}
       </AnimatePresence>
     </div>
   );
