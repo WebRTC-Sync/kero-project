@@ -1,22 +1,17 @@
 "use client";
 
 import { motion } from "framer-motion";
-import SectionWrapper from "@/components/animations/SectionWrapper";
-import RevealAnimation from "@/components/animations/RevealAnimation";
 
 const TEAM = ["윤희준", "정훈호", "김관익", "김성민", "박찬진", "윤희망"];
 
 export default function TeamMarquee() {
   return (
-    <SectionWrapper
+    <section
       id="team"
-      className="w-full py-12 sm:py-16 md:py-24 overflow-hidden"
+      className="w-full py-12 sm:py-16 md:py-24 mb-32 md:mb-48 overflow-hidden"
     >
-      
       <div className="relative z-10 flex flex-col items-center gap-8">
-        <RevealAnimation>
-          <h2 className="font-display text-4xl md:text-7xl font-bold text-center text-white">MEET THE TEAM</h2>
-        </RevealAnimation>
+        <h2 className="font-display text-4xl md:text-7xl font-bold text-center text-white">MEET THE TEAM</h2>
         
         <div className="flex w-full overflow-hidden whitespace-nowrap">
           <motion.div
@@ -33,6 +28,6 @@ export default function TeamMarquee() {
           </motion.div>
         </div>
       </div>
-    </SectionWrapper>
+    </section>
   );
 }

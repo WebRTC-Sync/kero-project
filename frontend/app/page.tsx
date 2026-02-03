@@ -32,8 +32,11 @@ export default function Home() {
           <section id="hero">
             <HeroSection />
           </section>
-          <section id="keyboard-intro" className="relative h-screen" />
-          <TeamMarquee />
+          <section id="keyboard-intro" className="relative h-screen">
+            <div className="absolute bottom-0 left-0 right-0">
+              <TeamMarquee />
+            </div>
+          </section>
           <SkillsSection />
           <ArchitectureSection />
           <FeaturesSection />
