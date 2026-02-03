@@ -149,37 +149,30 @@ export default function HeroSection() {
    }, [handleWheel]);
 
     useEffect(() => {
-      const handleKeyboardIntroWheel = (e: WheelEvent) => {
-        if (!hasExitedHero) return;
+      if (!lenis || !hasExitedHero) return;
+      
+      const heroHeight = containerRef.current?.offsetHeight || window.innerHeight;
+      let isSnapping = false;
+      
+      const handleLenisScroll = ({ scroll, direction }: { scroll: number; direction: number }) => {
+        if (isSnapping) return;
         
-        const heroHeight = containerRef.current?.offsetHeight || window.innerHeight;
-        const scrollY = window.scrollY;
+        const inKeyboardIntro = scroll > heroHeight * 0.3 && scroll < heroHeight * 1.8;
+        const scrollingUp = direction === -1;
         
-        // Trigger zone: keyboard-intro section (from 80% of hero to 2x hero height)
-        // Skip to Content lands at scrollY = heroHeight, so this covers that area
-        const inTriggerZone = scrollY > heroHeight * 0.8 && scrollY < heroHeight * 2;
-        
-        if (inTriggerZone && e.deltaY < -15) { // Upward scroll (lowered threshold)
-          const now = Date.now();
-          if (now - lastScrollTime.current < 150) return; // Faster response
-          lastScrollTime.current = now;
-          
-          e.preventDefault();
-          e.stopPropagation();
-          
+        if (inKeyboardIntro && scrollingUp) {
+          isSnapping = true;
           setActiveMode(0);
           setHasExitedHero(false);
           setIsReadyToScroll(false);
-          
-          if (lenis) {
-            lenis.scrollTo(0, { duration: 0.6 });
-          }
+          lenis.scrollTo(0, { duration: 0.6 });
+          setTimeout(() => { isSnapping = false; }, 700);
         }
       };
       
-      window.addEventListener('wheel', handleKeyboardIntroWheel, { passive: false, capture: true });
-      return () => window.removeEventListener('wheel', handleKeyboardIntroWheel, { capture: true });
-    }, [hasExitedHero, lenis]);
+      lenis.on('scroll', handleLenisScroll);
+      return () => lenis.off('scroll', handleLenisScroll);
+    }, [lenis, hasExitedHero]);
 
    const currentMode = modes[activeMode];
   const Icon = currentMode.icon;
