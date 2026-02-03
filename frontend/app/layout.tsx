@@ -1,9 +1,17 @@
 import type { Metadata } from "next";
+import { Archivo_Black } from "next/font/google";
 import PresenceProvider from "@/components/PresenceProvider";
 import { ReduxProvider } from "@/store/provider";
 import { Toaster } from "sonner";
 import ElasticCursor from "@/components/effects/ElasticCursor";
 import "./globals.css";
+
+const archivoBlack = Archivo_Black({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-archivo-black",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "KERO",
@@ -16,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={archivoBlack.variable}>
       <body className="antialiased">
         <PresenceProvider>
           <ReduxProvider>{children}</ReduxProvider>
