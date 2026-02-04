@@ -6,6 +6,7 @@ import React, { Suspense, useEffect, useState } from "react";
 import { Application, SPEObject, SplineEvent } from "@splinetool/runtime";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { AnimatePresence, motion } from "framer-motion";
 
 const Spline = React.lazy(() => import("@splinetool/react-spline"));
 
@@ -29,59 +30,57 @@ const findSkillFromObject = (obj: { name: string; id: string } | null): Skill | 
   return null;
 };
 
-// Apply brand colors, fix material opacity, and update WebRTC texture at runtime
+/*
+ * getAllObjects() returns a flat list ordered by scene hierarchy.
+ * We build a map of skill positions, then for each skill look forward
+ * (and backward as fallback) for the nearest keycap-desktop to color.
+ */
 const applyBrandColors = async (app: Application) => {
   try {
     const allObjects = app.getAllObjects();
-    const keycapDesktops = allObjects.filter((o: SPEObject) => o.name === 'keycap-desktop');
+    let applied = 0;
+    const colored = new Set<number>();
 
-    for (const keycap of keycapDesktops) {
-      // Traverse parent chain to find the skill name
-      let current: any = keycap;
-      let matchedSkill: typeof SKILLS[SkillNames] | null = null;
-      while (current) {
-        const skill = SKILLS[current.name as SkillNames];
-        if (skill) {
-          matchedSkill = skill;
+    // Build skill position map
+    const skillEntries: { skill: typeof SKILLS[SkillNames]; idx: number }[] = [];
+    allObjects.forEach((obj, idx) => {
+      const skill = SKILLS[obj.name as SkillNames];
+      if (skill) skillEntries.push({ skill, idx });
+    });
+
+    const applyColor = (obj: any, skill: typeof SKILLS[SkillNames], objIdx: number) => {
+      if (colored.has(objIdx)) return false;
+      try { obj.color = skill.color; } catch (_) {}
+      try { if (obj.material) obj.material.alpha = 1; } catch (_) {}
+      colored.add(objIdx);
+      applied++;
+      return true;
+    };
+
+    for (const { skill, idx } of skillEntries) {
+      let found = false;
+      // Look forward for nearest keycap-desktop
+      for (let i = idx + 1; i < allObjects.length; i++) {
+        if (SKILLS[allObjects[i].name as SkillNames]) break;
+        if (allObjects[i].name === 'keycap-desktop') {
+          found = applyColor(allObjects[i], skill, i);
           break;
         }
-        current = current.parent || null;
       }
-
-      if (!matchedSkill) continue;
-
-      // 1. Set brand color
-      try {
-        keycap.color = matchedSkill.color;
-      } catch (e) {
-        // Some objects may not support color setting
-      }
-
-      // 2. Fix material opacity (make opaque — fixes WebRTC, AWS S3, Redis transparency)
-      try {
-        if (keycap.material) {
-          keycap.material.alpha = 1;
-        }
-      } catch (e) {
-        // ignore
-      }
-
-      // 3. Update WebRTC keycap texture (js keycap still shows old JS icon)
-      if (matchedSkill.name === 'js') {
-        try {
-          if (keycap.material && keycap.material.layers) {
-            const textureLayer = keycap.material.layers.find((l: any) => l.type === 'texture');
-            if (textureLayer && 'updateTexture' in textureLayer) {
-              await (textureLayer as any).updateTexture('/assets/keycap-icons-hd/webrtc.png');
-            }
+      // Fallback: look backward
+      if (!found) {
+        for (let i = idx - 1; i >= 0; i--) {
+          if (SKILLS[allObjects[i].name as SkillNames]) break;
+          if (allObjects[i].name === 'keycap-desktop') {
+            found = applyColor(allObjects[i], skill, i);
+            break;
           }
-        } catch (e) {
-          console.warn('Failed to update WebRTC texture:', e);
         }
       }
     }
+    console.log(`[applyBrandColors] Applied to ${applied} keycaps`);
   } catch (e) {
-    console.warn('Failed to apply brand colors:', e);
+    console.error('[applyBrandColors] FATAL:', e);
   }
 };
 
@@ -403,16 +402,6 @@ const AnimatedBackground = () => {
     if (textDesktopLight) textDesktopLight.visible = false;
     if (textMobileDark) textMobileDark.visible = false;
     if (textMobileLight) textMobileLight.visible = false;
-
-    if (activeSection === "skills") {
-      if (isMobile) {
-        if (textMobileLight) textMobileLight.visible = true;
-        else if (textMobileDark) textMobileDark.visible = true;
-      } else {
-        if (textDesktopLight) textDesktopLight.visible = true;
-        else if (textDesktopDark) textDesktopDark.visible = true;
-      }
-    }
   }, [activeSection, splineApp, isMobile]);
 
   useEffect(() => {
@@ -506,17 +495,51 @@ const AnimatedBackground = () => {
   }, [splineApp, keyboardRevealed, isMobile, isLoading]);
 
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-       <Spline
-         className="w-full h-full fixed inset-0 z-0"
-         onLoad={(app: Application) => {
-           setSplineApp(app);
-           bypassLoading();
-           applyBrandColors(app);
-         }}
-         scene="/assets/skills-keyboard.spline"
-       />
-    </Suspense>
+    <>
+      <Suspense fallback={<div>Loading...</div>}>
+        <Spline
+          className="w-full h-full fixed inset-0 z-0"
+          onLoad={(app: Application) => {
+            setSplineApp(app);
+            bypassLoading();
+            setTimeout(() => {
+              applyBrandColors(app);
+            }, 1000);
+          }}
+          scene="/assets/skills-keyboard.spline"
+        />
+      </Suspense>
+
+      <AnimatePresence>
+        {selectedSkill && activeSection === "skills" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="fixed inset-0 z-50 pointer-events-none flex items-end justify-center pb-4 md:pb-6"
+          >
+            <div className="pointer-events-auto backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-4 md:p-6 max-w-md w-[90%] md:w-auto flex items-center gap-4 shadow-2xl">
+              <div className="flex-shrink-0 bg-white/10 rounded-lg p-2">
+                <img
+                  src={selectedSkill.icon}
+                  alt={selectedSkill.label}
+                  className="w-10 h-10 md:w-12 md:h-12 object-contain"
+                />
+              </div>
+              <div>
+                <h3 className="text-lg md:text-xl font-bold text-white font-display">
+                  {selectedSkill.label}
+                </h3>
+                <p className="text-sm md:text-base text-white/60 mt-1 font-display leading-tight">
+                  {selectedSkill.shortDescription}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 

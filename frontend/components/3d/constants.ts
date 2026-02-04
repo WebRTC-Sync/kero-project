@@ -68,7 +68,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "css",
     label: "Socket.io",
     shortDescription: "양방향 실시간 통신 — 방 관리, 이벤트 브로드캐스트 담당",
-    color: "#010101",
+    color: "#AAAAAA",
     icon: "/assets/keycap-icons-hd/socketdotio.png",
   },
   [SkillNames.REACT]: {
@@ -76,7 +76,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "react",
     label: "React",
     shortDescription: "컴포넌트 기반 UI 라이브러리 — KERO의 모든 화면을 그리는 핵심",
-    color: "#20232A",
+    color: "#61DAFB",
     icon: "/assets/keycap-icons-hd/react.png",
   },
   [SkillNames.VUE]: {
@@ -92,7 +92,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "nextjs",
     label: "Next.js",
     shortDescription: "App Router + SSR로 빌드한 프론트엔드 프레임워크",
-    color: "#000000",
+    color: "#FFFFFF",
     icon: "/assets/keycap-icons-hd/nextdotjs.png",
   },
   [SkillNames.TAILWIND]: {
@@ -116,7 +116,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "express",
     label: "Express.js",
     shortDescription: "RESTful API + 미들웨어로 설계한 백엔드 서버",
-    color: "#000000",
+    color: "#888888",
     icon: "/assets/keycap-icons-hd/express.png",
   },
   [SkillNames.POSTGRES]: {
@@ -140,7 +140,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "git",
     label: "RabbitMQ",
     shortDescription: "메시지 큐 — AI 작업 요청을 안정적으로 전달하는 중간 다리",
-    color: "#FF6600",
+    color: "#E0234E",
     icon: "/assets/keycap-icons-hd/rabbitmq.png",
   },
   [SkillNames.GITHUB]: {
@@ -188,7 +188,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "linux",
     label: "Linux",
     shortDescription: "Ubuntu 서버 — 모든 서비스가 돌아가는 안정적인 운영 체제",
-    color: "#FCC624",
+    color: "#C6538C",
     icon: "/assets/keycap-icons-hd/linux.png",
   },
   [SkillNames.DOCKER]: {
@@ -207,14 +207,14 @@ export const SKILLS: Record<SkillNames, Skill> = {
     color: "#009639",
     icon: "/assets/keycap-icons-hd/nginx.png",
   },
-  [SkillNames.AWS]: {
-    id: 22,
-    name: "aws",
-    label: "AWS S3",
-    shortDescription: "클라우드 스토리지 — 음원, MR, 보컬 파일을 안전하게 저장",
-    color: "#FF9900",
-    icon: "/assets/keycap-icons-hd/amazons3.png",
-  },
+   [SkillNames.AWS]: {
+     id: 22,
+     name: "aws",
+     label: "AWS S3",
+     shortDescription: "클라우드 스토리지 — 음원, MR, 보컬 파일을 안전하게 저장",
+     color: "#569A31",
+     icon: "/assets/keycap-icons-hd/amazons3.png",
+   },
   [SkillNames.GCP]: {
     id: 23,
     name: "gcp",
@@ -236,7 +236,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "vercel",
     label: "FCPE",
     shortDescription: "실시간 음정 분석 AI — 빠르고 정확한 F0 추출로 노래 점수 계산",
-    color: "#F97316",
+    color: "#8B5CF6",
     icon: "/assets/keycap-icons-hd/fcpe.png",
   },
 };
