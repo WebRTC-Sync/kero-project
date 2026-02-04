@@ -5,8 +5,6 @@ torchaudio==2.8.0+cu126
 whisperx>=3.7.0
 faster-whisper>=1.0.0
 silero-vad>=5.1
-qwen-asr>=0.0.6
-soynlp>=0.0.493
 omegaconf>=2.3.0
 
 audio-separator>=0.40.0
@@ -21,8 +19,6 @@ pika>=1.3.2
 redis>=5.0.0
 boto3>=1.35.0
 python-dotenv>=1.0.0
-pydub>=0.25.1
 soundfile>=0.13.0
 requests>=2.32.0
 yt-dlp>=2024.12.0
-matplotlib>=3.9.0

@@ -9,14 +9,10 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 # Install system dependencies including FFmpeg 6+ from backports
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    unzip \
-    gnupg \
     git \
     xz-utils \
     libsndfile1 \
     libgomp1 \
-    wget \
-    bzip2 \
     ca-certificates \
     gcc \
     g++ \
