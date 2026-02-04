@@ -14,6 +14,7 @@ from __future__ import annotations
 import gc
 import logging
 import math
+import yaml
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
@@ -94,17 +95,43 @@ class SOFAAligner:
         return self._infer_engine
 
     def _get_ph_to_idx(self) -> dict:
-        """Load phoneme vocabulary from the Korean dictionary file.
+        """Load phoneme vocabulary from YAML config (ground truth from training).
 
-        Builds a mapping ``phoneme_string → integer_index`` by collecting all
-        unique phonemes from ``sofa/dictionary/korean.txt``.
+        First attempts to load from ``sofa/models/sofa_korean_config.yaml``,
+        which contains the exact vocab the ONNX model was trained with.
+        Falls back to building from ``sofa/dictionary/korean.txt`` if YAML is unavailable.
 
-        The dictionary format is tab-separated: ``<word>\\t<ph1> <ph2> ...``
-        SP is forced to index 0 for deterministic ordering.
+        Returns:
+            Mapping ``phoneme_string → integer_index``.
         """
         if self._ph_to_idx is not None:
             return self._ph_to_idx
 
+        # Try loading from YAML config (ground truth from training)
+        config_path = SOFA_DIR / "models" / "sofa_korean_config.yaml"
+        if config_path.exists():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f)
+                vocab_section = config.get("vocab", {})
+                ph_to_idx = {}
+                for key, value in vocab_section.items():
+                    # Only take forward mapping: string key → int value
+                    # Skip reverse mappings (int keys) and metadata (<vocab_size>)
+                    if isinstance(key, str) and isinstance(value, int) and not key.startswith("<"):
+                        ph_to_idx[key] = value
+                if ph_to_idx:
+                    self._ph_to_idx = ph_to_idx
+                    logger.info(
+                        "Loaded phoneme vocabulary from config: %d phonemes from %s",
+                        len(self._ph_to_idx),
+                        config_path,
+                    )
+                    return self._ph_to_idx
+            except Exception as e:
+                logger.warning("Failed to load vocab from config %s: %s", config_path, e)
+
+        # Fallback: build from dictionary file (original approach)
         dict_path = SOFA_DIR / "dictionary" / "korean.txt"
         if not dict_path.exists():
             raise FileNotFoundError(
@@ -128,7 +155,7 @@ class SOFAAligner:
         self._ph_to_idx = {ph: idx for idx, ph in enumerate(sorted_phs)}
 
         logger.info(
-            "Loaded phoneme vocabulary: %d phonemes from %s",
+            "Loaded phoneme vocabulary (fallback): %d phonemes from %s",
             len(self._ph_to_idx),
             dict_path,
         )

@@ -1,0 +1,7 @@
+# Large ONNX model files — mounted as volume at runtime
+sofa/models/*.onnx
+# Python cache
+__pycache__/
+*.pyc
+# Training artifacts (not needed in production)
+sofa/training/

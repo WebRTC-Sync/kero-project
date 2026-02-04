@@ -17,7 +17,8 @@ services:
               count: all
               capabilities: [gpu]
     volumes:
-      - ./cookies:/app/cookies
+       - ./cookies:/app/cookies
+       - ./sofa/models:/app/sofa/models:ro
     environment:
       - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
@@ -33,6 +34,8 @@ services:
       - PROCESSING_SECRET=${PROCESSING_SECRET}
       - BACKEND_API_URL=${BACKEND_API_URL:-https://kero.ooo}
       - TEMP_DIR=${TEMP_DIR:-/tmp/kero-ai}
+      - USE_SOFA_ALIGNER=${USE_SOFA_ALIGNER:-false}
+      - SOFA_MODEL_PATH=${SOFA_MODEL_PATH:-}
     logging:
       driver: json-file
       options:
