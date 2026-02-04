@@ -76,7 +76,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "react",
     label: "React",
     shortDescription: "컴포넌트 기반 UI 라이브러리 — KERO의 모든 화면을 그리는 핵심",
-    color: "#61DAFB",
+    color: "#20232A",
     icon: "/assets/keycap-icons-hd/react.png",
   },
   [SkillNames.VUE]: {

@@ -29,28 +29,57 @@ const findSkillFromObject = (obj: { name: string; id: string } | null): Skill | 
   return null;
 };
 
-// Apply brand colors to all keycap-desktop objects at runtime
-const applyBrandColors = (app: Application) => {
+// Apply brand colors, fix material opacity, and update WebRTC texture at runtime
+const applyBrandColors = async (app: Application) => {
   try {
     const allObjects = app.getAllObjects();
     const keycapDesktops = allObjects.filter((o: SPEObject) => o.name === 'keycap-desktop');
-    
-    keycapDesktops.forEach((keycap: SPEObject) => {
+
+    for (const keycap of keycapDesktops) {
       // Traverse parent chain to find the skill name
       let current: any = keycap;
+      let matchedSkill: typeof SKILLS[SkillNames] | null = null;
       while (current) {
         const skill = SKILLS[current.name as SkillNames];
         if (skill) {
-          try {
-            keycap.color = skill.color;
-          } catch (e) {
-            // Some objects may not support color setting
-          }
+          matchedSkill = skill;
           break;
         }
         current = current.parent || null;
       }
-    });
+
+      if (!matchedSkill) continue;
+
+      // 1. Set brand color
+      try {
+        keycap.color = matchedSkill.color;
+      } catch (e) {
+        // Some objects may not support color setting
+      }
+
+      // 2. Fix material opacity (make opaque — fixes WebRTC, AWS S3, Redis transparency)
+      try {
+        if (keycap.material) {
+          keycap.material.alpha = 1;
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // 3. Update WebRTC keycap texture (js keycap still shows old JS icon)
+      if (matchedSkill.name === 'js') {
+        try {
+          if (keycap.material && keycap.material.layers) {
+            const textureLayer = keycap.material.layers.find((l: any) => l.type === 'texture');
+            if (textureLayer && 'updateTexture' in textureLayer) {
+              await (textureLayer as any).updateTexture('/assets/keycap-icons-hd/webrtc.png');
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to update WebRTC texture:', e);
+        }
+      }
+    }
   } catch (e) {
     console.warn('Failed to apply brand colors:', e);
   }
@@ -484,14 +513,6 @@ const AnimatedBackground = () => {
            setSplineApp(app);
            bypassLoading();
            applyBrandColors(app);
-           try {
-             const renderer = (app as any)._renderer;
-             if (renderer && renderer.setPixelRatio) {
-               renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-             }
-           } catch (e) {
-             // ignore
-           }
          }}
          scene="/assets/skills-keyboard.spline"
        />
