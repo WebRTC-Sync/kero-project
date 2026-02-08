@@ -3,6 +3,7 @@
 import { useEffect, useCallback } from "react";
 import { useDispatch } from "react-redux";
 import { getSocket, connectSocket, disconnectSocket } from "@/lib/socket";
+import { store } from "@/store";
 import { setRoom, addParticipant, removeParticipant, setRoomStatus, setConnected, leaveRoom as leaveRoomAction } from "@/store/slices/roomSlice";
 import { 
   setGameStatus, 
@@ -29,6 +30,19 @@ export function useSocket(roomCode: string | null) {
     if (!token) return;
 
     const socket = connectSocket(token);
+
+    const getModeRedirectUrl = () => {
+      const state = store.getState();
+      const gameMode = state.room.gameMode || state.game.mode;
+      const modeRoutes: Record<string, string> = {
+        normal: "/mode/normal",
+        perfect_score: "/mode/perfect-score",
+        lyrics_quiz: "/mode/lyrics-quiz",
+        battle: "/mode/battle",
+        duet: "/mode/duet",
+      };
+      return gameMode ? modeRoutes[gameMode] || "/lobby" : "/lobby";
+    };
 
     socket.on("connect", () => {
       dispatch(setConnected(true));
@@ -69,7 +83,7 @@ export function useSocket(roomCode: string | null) {
       if (window.location.pathname.includes(roomCode)) {
         dispatch(leaveRoomAction());
         alert(data.reason);
-        window.location.href = "/lobby";
+        window.location.href = getModeRedirectUrl();
       }
     });
 
@@ -77,8 +91,9 @@ export function useSocket(roomCode: string | null) {
       console.error("[Socket Error]", data.message);
       // Only redirect if we're still on this room's page
       if (window.location.pathname.includes(roomCode)) {
+        dispatch(leaveRoomAction());
         alert(data.message);
-        window.location.href = "/lobby";
+        window.location.href = getModeRedirectUrl();
       }
     });
 
@@ -159,6 +174,10 @@ export function useSocket(roomCode: string | null) {
     socket.on("quiz:sync-state", (data: { questions: any[] }) => {
       dispatch(setQuizQuestions(data.questions));
       dispatch(setGameStatus("playing"));
+    });
+
+    socket.on("quiz:settings-updated", (data: { quizCount: number; quizCategory: string }) => {
+      window.dispatchEvent(new CustomEvent("kero:quizSettingsUpdated", { detail: data }));
     });
 
     // Queue synchronization listeners

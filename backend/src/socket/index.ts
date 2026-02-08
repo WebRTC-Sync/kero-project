@@ -444,6 +444,15 @@ export function initializeSocket(httpServer: HttpServer): Server {
       socket.to(roomCode).emit("quiz:questions-data", data.questions);
     });
 
+    socket.on("quiz:settings-update", (data: { roomCode: string; quizCount: number; quizCategory: string }) => {
+      const roomCode = data.roomCode || socket.data.roomCode;
+      if (!roomCode) return;
+      socket.to(roomCode).emit("quiz:settings-updated", {
+        quizCount: data.quizCount,
+        quizCategory: data.quizCategory,
+      });
+    });
+
     normalModeHandler.registerEvents(socket);
     perfectScoreHandler.registerEvents(socket);
     lyricsQuizHandler.registerEvents(socket);

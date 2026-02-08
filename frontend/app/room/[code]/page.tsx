@@ -202,6 +202,21 @@ export default function RoomPage() {
     return () => window.removeEventListener("kero:skipForward", handleSkipForward);
   }, []);
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      if (isHost) return;
+      const customEvent = event as CustomEvent<{ quizCount: number; quizCategory: string }>;
+      const nextCategory = customEvent.detail.quizCategory;
+      if (nextCategory === "KOR" || nextCategory === "JPN" || nextCategory === "ENG") {
+        setQuizCategory(nextCategory);
+      }
+      setQuizCount(customEvent.detail.quizCount);
+    };
+
+    window.addEventListener("kero:quizSettingsUpdated", handler);
+    return () => window.removeEventListener("kero:quizSettingsUpdated", handler);
+  }, [isHost]);
+
    // Clear quiz loading state when game starts
    useEffect(() => {
      if (gameStatus === "playing") {
@@ -972,7 +987,12 @@ export default function RoomPage() {
                 ]).map(({ key, label, emoji }) => (
                   <button
                     key={key}
-                    onClick={() => isHost && setQuizCategory(key)}
+                    onClick={() => {
+                      if (isHost) {
+                        setQuizCategory(key);
+                        emitEvent("quiz:settings-update", { roomCode: code, quizCount, quizCategory: key });
+                      }
+                    }}
                     disabled={!isHost}
                     className={`px-4 py-2.5 sm:px-5 sm:py-3 rounded-xl font-bold text-sm sm:text-base whitespace-nowrap transition-all border ${
                       quizCategory === key
@@ -992,7 +1012,12 @@ export default function RoomPage() {
                {[10, 30, 50, 100].map((num) => (
                    <button
                      key={num}
-                     onClick={() => isHost && setQuizCount(num)}
+                     onClick={() => {
+                       if (isHost) {
+                         setQuizCount(num);
+                         emitEvent("quiz:settings-update", { roomCode: code, quizCount: num, quizCategory });
+                       }
+                     }}
                      disabled={!isHost}
                      className={`px-3 py-2 sm:px-5 sm:py-3 rounded-xl font-bold text-sm sm:text-base whitespace-nowrap transition-all border ${
                        quizCount === num
