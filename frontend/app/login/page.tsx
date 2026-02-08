@@ -2,9 +2,9 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Link from "next/link";
-import { Music, Eye, EyeOff, Loader2, X, Mail, ArrowLeft, Check } from "lucide-react";
+import { Music, Eye, EyeOff, Loader2 } from "lucide-react";
 
 function GoogleIcon() {
   return (
@@ -25,248 +25,6 @@ function KakaoIcon() {
   );
 }
 
-function PasswordRecoveryModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const [step, setStep] = useState<"email" | "code" | "reset" | "done">("email");
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSendCode = async () => {
-    if (!email) return;
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/auth/send-verification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setError(data.message || "인증 코드 전송에 실패했습니다.");
-        setLoading(false);
-        return;
-      }
-      setStep("code");
-    } catch {
-      setError("서버 연결에 실패했습니다.");
-    }
-    setLoading(false);
-  };
-
-  const handleVerifyCode = async () => {
-    if (!code) return;
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/auth/verify-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setError(data.message || "인증 코드가 올바르지 않습니다.");
-        setLoading(false);
-        return;
-      }
-      setStep("reset");
-    } catch {
-      setError("서버 연결에 실패했습니다.");
-    }
-    setLoading(false);
-  };
-
-  const handleResetPassword = async () => {
-    if (newPassword !== confirmPassword) {
-      setError("비밀번호가 일치하지 않습니다.");
-      return;
-    }
-    if (newPassword.length < 8) {
-      setError("비밀번호는 8자 이상이어야 합니다.");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code, newPassword }),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setError(data.message || "비밀번호 재설정에 실패했습니다.");
-        setLoading(false);
-        return;
-      }
-      setStep("done");
-    } catch {
-      setError("서버 연결에 실패했습니다.");
-    }
-    setLoading(false);
-  };
-
-  const handleClose = () => {
-    setStep("email");
-    setEmail("");
-    setCode("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setError("");
-    onClose();
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-      onClick={handleClose}
-    >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className="w-full max-w-sm bg-zinc-900 border border-white/10 rounded-2xl p-6 relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button onClick={handleClose} className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-colors">
-          <X className="w-4 h-4" />
-        </button>
-
-        <h2 className="text-xl font-bold text-white mb-6">비밀번호 찾기</h2>
-
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/50 rounded-xl px-4 py-3 text-red-400 text-sm mb-4">
-            {error}
-          </div>
-        )}
-
-        {step === "email" && (
-          <div className="space-y-4">
-            <p className="text-gray-400 text-sm">가입한 이메일 주소를 입력하면 인증 코드를 보내드립니다.</p>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5 ml-1">이메일</label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#C0C0C0] transition-colors"
-                  placeholder="example@email.com"
-                />
-              </div>
-            </div>
-            <button
-              onClick={handleSendCode}
-              disabled={loading || !email}
-              className="w-full py-3 rounded-xl font-medium text-black bg-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:bg-gray-100 transition-colors"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              인증 코드 전송
-            </button>
-          </div>
-        )}
-
-        {step === "code" && (
-          <div className="space-y-4">
-            <p className="text-gray-400 text-sm"><span className="text-white">{email}</span>으로 전송된 인증 코드를 입력하세요.</p>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5 ml-1">인증 코드</label>
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-center text-2xl tracking-[0.5em] placeholder-gray-500 focus:outline-none focus:border-[#C0C0C0] transition-colors"
-                placeholder="000000"
-                maxLength={6}
-              />
-            </div>
-            <button
-              onClick={handleVerifyCode}
-              disabled={loading || !code}
-              className="w-full py-3 rounded-xl font-medium text-black bg-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:bg-gray-100 transition-colors"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              확인
-            </button>
-            <button onClick={() => { setStep("email"); setError(""); }} className="w-full text-center text-sm text-gray-500 hover:text-white transition-colors flex items-center justify-center gap-1">
-              <ArrowLeft className="w-3 h-3" /> 이메일 다시 입력
-            </button>
-          </div>
-        )}
-
-        {step === "reset" && (
-          <div className="space-y-4">
-            <p className="text-gray-400 text-sm">새로운 비밀번호를 입력하세요.</p>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5 ml-1">새 비밀번호</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#C0C0C0] transition-colors pr-12"
-                  placeholder="8자 이상 입력"
-                  minLength={8}
-                />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors">
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5 ml-1">비밀번호 확인</label>
-              <input
-                type={showPassword ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={`w-full bg-white/5 border rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none transition-colors ${
-                  confirmPassword && newPassword === confirmPassword ? "border-green-500" : "border-white/10 focus:border-[#C0C0C0]"
-                }`}
-                placeholder="비밀번호 재입력"
-              />
-            </div>
-            <button
-              onClick={handleResetPassword}
-              disabled={loading || !newPassword || !confirmPassword}
-              className="w-full py-3 rounded-xl font-medium text-black bg-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:bg-gray-100 transition-colors"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              비밀번호 재설정
-            </button>
-          </div>
-        )}
-
-        {step === "done" && (
-          <div className="text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-full bg-green-500/20 flex items-center justify-center">
-              <Check className="w-8 h-8 text-green-400" />
-            </div>
-            <p className="text-white font-medium">비밀번호가 변경되었습니다</p>
-            <p className="text-gray-400 text-sm">새 비밀번호로 로그인하세요.</p>
-            <button
-              onClick={handleClose}
-              className="w-full py-3 rounded-xl font-medium text-black bg-white hover:bg-gray-100 transition-colors"
-            >
-              확인
-            </button>
-          </div>
-        )}
-      </motion.div>
-    </motion.div>
-  );
-}
-
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -275,7 +33,6 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
   const [socialLoading, setSocialLoading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -304,11 +61,11 @@ function LoginForm() {
     if (provider === "google") {
       const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
       const redirectUri = `${window.location.origin}/auth/google/callback`;
-      url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent("email profile")}`;
+      url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent("email profile")}&prompt=select_account`;
     } else {
       const clientId = process.env.NEXT_PUBLIC_KAKAO_CLIENT_ID;
       const redirectUri = `${window.location.origin}/auth/kakao/callback`;
-      url = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code`;
+      url = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&prompt=login`;
     }
 
     const popup = window.open(url, `${provider}_login`, `width=${width},height=${height},left=${left},top=${top}`);
@@ -402,9 +159,9 @@ function LoginForm() {
             <input type="checkbox" className="rounded bg-white/5 border-white/10" />
             <span>로그인 유지</span>
           </label>
-          <button type="button" onClick={() => setShowPasswordRecovery(true)} className="text-[#C0C0C0] hover:text-white transition-colors">
+          <Link href="/forgot-password" className="text-[#C0C0C0] hover:text-white transition-colors">
             비밀번호 찾기
-          </button>
+          </Link>
         </div>
 
         <motion.button
@@ -467,9 +224,6 @@ function LoginForm() {
         </p>
       </div>
 
-      <AnimatePresence>
-        <PasswordRecoveryModal isOpen={showPasswordRecovery} onClose={() => setShowPasswordRecovery(false)} />
-      </AnimatePresence>
     </div>
   );
 }
