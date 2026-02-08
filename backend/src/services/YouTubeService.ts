@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from "child_process";
 import { promises as fs } from "fs";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
+import { Writable } from "stream";
 import { uploadFile } from "../config/s3";
 
 interface YouTubeSearchResult {
@@ -283,10 +284,11 @@ export class YouTubeService {
       const args = [
         ...cookiesArgs,
         `https://www.youtube.com/watch?v=${videoId}`,
-        "-f", "bestaudio",
+        "-f", "bestaudio/best",
         "-g",
         "--no-playlist",
         "--no-warnings",
+        "--extractor-args", "youtube:player-client=web,default",
       ];
 
       const proc = spawn("yt-dlp", args);
@@ -307,6 +309,62 @@ export class YouTubeService {
     });
 
     return this.withTimeout(promise, 15000, "yt-dlp audio URL extraction timed out").catch(() => null);
+  }
+
+  async pipeAudioStream(
+    videoId: string,
+    output: Writable,
+    onError: (err: string) => void,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    const cookiesArgs = await this.getCookiesArgs();
+    const args = [
+      ...cookiesArgs,
+      `https://www.youtube.com/watch?v=${videoId}`,
+      "-f", "bestaudio/best",
+      "-o", "-",
+      "--no-playlist",
+      "--no-warnings",
+      "--extractor-args", "youtube:player-client=web,default",
+    ];
+
+    const proc = spawn("yt-dlp", args);
+    let stderrBuf = "";
+
+    proc.stderr.on("data", (data: Buffer) => { stderrBuf += data.toString(); });
+
+    proc.stdout.pipe(output, { end: false });
+
+    const done = new Promise<void>((resolve, reject) => {
+      proc.on("close", (code) => {
+        if (code !== 0) {
+          console.error(`[yt-dlp] pipe stream failed (code ${code}):`, stderrBuf);
+          onError(stderrBuf);
+        }
+        if (!output.destroyed) {
+          output.end();
+        }
+        resolve();
+      });
+
+      proc.on("error", (err) => {
+        console.error("[yt-dlp] spawn error:", err.message);
+        onError(err.message);
+        reject(err);
+      });
+    });
+
+    if (abortSignal) {
+      const onAbort = () => {
+        proc.kill("SIGTERM");
+      };
+      abortSignal.addEventListener("abort", onAbort, { once: true });
+      proc.on("close", () => {
+        abortSignal.removeEventListener("abort", onAbort);
+      });
+    }
+
+    return this.withTimeout(done, 60000, "yt-dlp audio pipe timed out", proc);
   }
 
   private formatDuration(seconds: number | null): string {
