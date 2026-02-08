@@ -410,7 +410,27 @@ export class SongService {
         );
       }
       
-      console.log(`[QuizCache] Warmup complete: ${cachedCount} cached, ${searchedCount} searched`);
+      console.log(`[QuizCache] YT warmup complete: ${cachedCount} cached, ${searchedCount} searched`);
+
+      // Pre-cache lyrics for top songs
+      let lyricsCached = 0;
+      let lyricsSearched = 0;
+      for (let i = 0; i < tjSongs.length; i += 5) {
+        const batch = tjSongs.slice(i, i + 5);
+        await Promise.all(
+          batch.map(async (song) => {
+            const lyricsCacheKey = `lyrics:${cleanTitle(song.title)}:${cleanTitle(song.artist)}`;
+            const existing = await redis.get(lyricsCacheKey);
+            if (existing) {
+              lyricsCached++;
+              return;
+            }
+            await this.fetchLyricsFromAPI(cleanTitle(song.title), cleanTitle(song.artist)).catch(() => []);
+            lyricsSearched++;
+          })
+        );
+      }
+      console.log(`[QuizCache] Lyrics warmup complete: ${lyricsCached} cached, ${lyricsSearched} fetched`);
     } catch (e) {
       console.error("[QuizCache] Warmup error:", e);
     }

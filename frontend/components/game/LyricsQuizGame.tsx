@@ -8,6 +8,13 @@ import type { RootState } from "@/store";
 import { selectAnswer, nextQuestion, revealAnswer, setGameStatus, updateStreak, resetQuiz, setQuizQuestions } from "@/store/slices/gameSlice";
 import { useSocket } from "@/hooks/useSocket";
 
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady: (() => void) | undefined;
+  }
+}
+
 const KAHOOT_COLORS = [
   { bg: "#E21B3C", ring: "ring-[#E21B3C]", shape: "▲", name: "red" },
   { bg: "#1368CE", ring: "ring-[#1368CE]", shape: "◆", name: "blue" },
@@ -101,11 +108,14 @@ export default function LyricsQuizGame({
    
    const [ordering, setOrdering] = useState<number[]>([]);
    const [textAnswer, setTextAnswer] = useState("");
-   const [youtubeVideoId, setYoutubeVideoId] = useState<string | null>(null);
    const [correctCount, setCorrectCount] = useState(0);
    const [wrongCount, setWrongCount] = useState(0);
    const [maxStreakLocal, setMaxStreakLocal] = useState(0);
    const [localIdentity, setLocalIdentity] = useState<{ id: string; name: string }>({ id: "", name: "" });
+   const [ytApiReady, setYtApiReady] = useState(false);
+   const ytPlayerRef = useRef<any>(null);
+   const ytContainerRef = useRef<HTMLDivElement>(null);
+   const pendingVideoRef = useRef<string | null>(null);
 
    useEffect(() => {
      const userRaw = localStorage.getItem("user");
@@ -120,6 +130,68 @@ export default function LyricsQuizGame({
        setLocalIdentity({ id: "", name: "" });
      }
    }, []);
+
+   // Load YouTube IFrame API once
+   useEffect(() => {
+     if (window.YT && window.YT.Player) {
+       setYtApiReady(true);
+       return;
+     }
+     const prev = window.onYouTubeIframeAPIReady;
+     window.onYouTubeIframeAPIReady = () => {
+       setYtApiReady(true);
+       if (prev) prev();
+     };
+     if (!document.getElementById("yt-iframe-api")) {
+       const tag = document.createElement("script");
+       tag.id = "yt-iframe-api";
+       tag.src = "https://www.youtube.com/iframe_api";
+       document.head.appendChild(tag);
+     }
+   }, []);
+
+   // Create persistent YT Player instance once API is ready
+   useEffect(() => {
+     if (!ytApiReady || ytPlayerRef.current || !ytContainerRef.current) return;
+
+     ytPlayerRef.current = new window.YT.Player(ytContainerRef.current, {
+       width: 1,
+       height: 1,
+       playerVars: {
+         autoplay: 0,
+         controls: 0,
+         disablekb: 1,
+         fs: 0,
+         modestbranding: 1,
+         rel: 0,
+         playsinline: 1,
+       },
+       events: {
+         onReady: () => {
+           // If a video was queued before the player was ready, play it now
+           if (pendingVideoRef.current) {
+             const vid = pendingVideoRef.current;
+             pendingVideoRef.current = null;
+             ytPlayerRef.current?.loadVideoById({ videoId: vid, startSeconds: 30 });
+             setTimeout(() => {
+               try {
+                 ytPlayerRef.current?.unMute();
+                 ytPlayerRef.current?.setVolume(50);
+               } catch {}
+             }, 300);
+           }
+         },
+         onError: (e: any) => {
+           console.warn("[YT Player] Error:", e.data);
+         },
+       },
+     });
+
+     return () => {
+       try { ytPlayerRef.current?.destroy(); } catch {}
+       ytPlayerRef.current = null;
+     };
+   }, [ytApiReady]);
 
     const cleanDisplay = (s: string) => s?.replace(/\s*[\(（\[【].*?[\)）\]】]/g, '').replace(/[\(（\[【\)）\]】]/g, '').trim() || '';
 
@@ -175,11 +247,11 @@ export default function LyricsQuizGame({
 
   useEffect(() => {
     if (!currentQuestion) {
-      setYoutubeVideoId(null);
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      try { ytPlayerRef.current?.pauseVideo(); } catch {}
       return;
     }
     
@@ -187,7 +259,7 @@ export default function LyricsQuizGame({
     const ytVideoId = currentQuestion.metadata?.youtubeVideoId;
     
     if (audioUrl) {
-      setYoutubeVideoId(null);
+      try { ytPlayerRef.current?.pauseVideo(); } catch {}
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
       const startTime = currentQuestion.metadata?.audioStartTime || 0;
@@ -205,17 +277,28 @@ export default function LyricsQuizGame({
         audioRef.current.pause();
         audioRef.current = null;
       }
-      setYoutubeVideoId(ytVideoId);
+      const player = ytPlayerRef.current;
+      if (player && typeof player.loadVideoById === "function") {
+        player.loadVideoById({ videoId: ytVideoId, startSeconds: 30 });
+        setTimeout(() => {
+          try {
+            player.unMute();
+            player.setVolume(50);
+          } catch {}
+        }, 300);
+      } else {
+        pendingVideoRef.current = ytVideoId;
+      }
       
       return () => {
-        setYoutubeVideoId(null);
+        try { ytPlayerRef.current?.pauseVideo(); } catch {}
       };
     } else {
-      setYoutubeVideoId(null);
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      try { ytPlayerRef.current?.pauseVideo(); } catch {}
     }
   }, [currentQuestionIndex, currentQuestion]);
 
@@ -267,11 +350,9 @@ export default function LyricsQuizGame({
         setShowResults(false);
         if (audioRef.current) {
           audioRef.current.pause();
-        }
-        setYoutubeVideoId(null);
-        if (audioRef.current) {
           audioRef.current = null;
         }
+        try { ytPlayerRef.current?.pauseVideo(); } catch {}
         dispatch(nextQuestion());
         advanceTimeoutRef.current = null;
       }, advanceDelay);
@@ -288,7 +369,7 @@ export default function LyricsQuizGame({
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      setYoutubeVideoId(null);
+      try { ytPlayerRef.current?.pauseVideo(); } catch {}
       dispatch(selectAnswer(index));
      
      let answerValue: any = "";
@@ -329,7 +410,7 @@ export default function LyricsQuizGame({
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      setYoutubeVideoId(null);
+      try { ytPlayerRef.current?.pauseVideo(); } catch {}
       
       const correctOrder = currentQuestion.correctOrder || [0, 1, 2, 3];
      const isCorrect = JSON.stringify(ordering) === JSON.stringify(correctOrder);
@@ -360,7 +441,7 @@ export default function LyricsQuizGame({
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      setYoutubeVideoId(null);
+      try { ytPlayerRef.current?.pauseVideo(); } catch {}
 
       const normalize = (s: string) => s.replace(/\s*[\(（\[【].*?[\)）\]】]/g, '').replace(/[\(（\[【\)）\]】]/g, '').replace(/\s/g, '').toLowerCase();
      const isCorrect = normalize(textAnswer.trim()) === normalize(currentQuestion.correctAnswer || "");
@@ -462,7 +543,7 @@ export default function LyricsQuizGame({
        audioRef.current.pause();
        audioRef.current = null;
      }
-     setYoutubeVideoId(null);
+     try { ytPlayerRef.current?.pauseVideo(); } catch {}
      dispatch(resetQuiz());
      if (onBack) {
        onBack();
@@ -825,20 +906,50 @@ export default function LyricsQuizGame({
 
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-[#46178F] to-[#1D0939] font-sans flex flex-col">
-      {youtubeVideoId && (
-        <iframe
-          key={youtubeVideoId}
-          src={`https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&start=30&controls=0&showinfo=0&rel=0&modestbranding=1`}
-          allow="autoplay"
-          className="absolute w-1 h-1 opacity-0 pointer-events-none"
-          title="quiz-audio"
-        />
-      )}
+      <div ref={ytContainerRef} className="absolute w-1 h-1 opacity-0 pointer-events-none" />
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none"></div>
 
       <div className="relative z-10 flex-1 flex flex-col p-3 min-w-0 min-h-0">
-        <div className="flex items-center justify-between py-2 px-1 sm:px-5 border-b border-white/10 gap-3 shrink-0">
-          <div className="flex items-center gap-3 sm:gap-6">
+        <div className="flex items-center justify-between py-2 px-1 sm:px-5 border-b border-white/10 gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="p-2 rounded-lg bg-white/10 text-white/80 hover:text-white hover:bg-white/20 transition-all"
+                title="대기실로 돌아가기"
+              >
+                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            )}
+            {onMicToggle && mediaStatus && (
+              <button
+                onClick={onMicToggle}
+                className={`p-2 rounded-lg transition-all duration-200 ${
+                  mediaStatus.isMicOn
+                    ? "bg-white/10 hover:bg-white/20 text-white"
+                    : "bg-red-500/80 hover:bg-red-500 text-white"
+                }`}
+                title={mediaStatus.isMicOn ? "마이크 끄기" : "마이크 켜기"}
+              >
+                {mediaStatus.isMicOn ? <Mic className="w-4 h-4 sm:w-5 sm:h-5" /> : <MicOff className="w-4 h-4 sm:w-5 sm:h-5" />}
+              </button>
+            )}
+            {onCameraToggle && mediaStatus && (
+              <button
+                onClick={onCameraToggle}
+                className={`p-2 rounded-lg transition-all duration-200 ${
+                  mediaStatus.isCameraOn
+                    ? "bg-white/10 hover:bg-white/20 text-white"
+                    : "bg-red-500/80 hover:bg-red-500 text-white"
+                }`}
+                title={mediaStatus.isCameraOn ? "카메라 끄기" : "카메라 켜기"}
+              >
+                {mediaStatus.isCameraOn ? <Video className="w-4 h-4 sm:w-5 sm:h-5" /> : <CameraOff className="w-4 h-4 sm:w-5 sm:h-5" />}
+              </button>
+            )}
+
+            <div className="w-px h-8 bg-white/10 mx-1 hidden sm:block" />
+
             <div className="flex flex-col">
               <span className="text-xs sm:text-sm font-bold text-white/60 uppercase tracking-widest">Question</span>
               <span className="text-xl sm:text-3xl font-black text-white">{currentQuestionIndex + 1} <span className="text-sm sm:text-lg text-white/40">/ {quizQuestions.length}</span></span>
@@ -916,46 +1027,6 @@ export default function LyricsQuizGame({
                 <div className="h-full min-h-[300px]">{cameraElement}</div>
               </div>
             </aside>
-          )}
-        </div>
-      </div>
-
-      <div className="relative z-10 shrink-0 h-20 bg-black/30 backdrop-blur-md border-t border-white/10 flex items-center px-4">
-        <div className="flex items-center gap-2">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="p-2.5 rounded-lg bg-white/10 text-white/80 hover:text-white hover:bg-white/20 transition-all"
-              title="대기실로 돌아가기"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          )}
-          {onMicToggle && mediaStatus && (
-            <button
-              onClick={onMicToggle}
-              className={`p-2.5 rounded-lg transition-all duration-200 ${
-                mediaStatus.isMicOn
-                  ? "bg-white/10 hover:bg-white/20 text-white"
-                  : "bg-red-500/80 hover:bg-red-500 text-white"
-              }`}
-              title={mediaStatus.isMicOn ? "마이크 끄기" : "마이크 켜기"}
-            >
-              {mediaStatus.isMicOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-            </button>
-          )}
-          {onCameraToggle && mediaStatus && (
-            <button
-              onClick={onCameraToggle}
-              className={`p-2.5 rounded-lg transition-all duration-200 ${
-                mediaStatus.isCameraOn
-                  ? "bg-white/10 hover:bg-white/20 text-white"
-                  : "bg-red-500/80 hover:bg-red-500 text-white"
-              }`}
-              title={mediaStatus.isCameraOn ? "카메라 끄기" : "카메라 켜기"}
-            >
-              {mediaStatus.isCameraOn ? <Video className="w-5 h-5" /> : <CameraOff className="w-5 h-5" />}
-            </button>
           )}
         </div>
       </div>
