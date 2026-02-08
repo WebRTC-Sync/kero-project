@@ -13,11 +13,17 @@ export class User {
   @Column({ unique: true, length: 255 })
   email!: string;
 
-  @Column({ length: 20 })
-  phone!: string;
+  @Column({ length: 20, nullable: true })
+  phone?: string;
 
-  @Column()
-  password!: string;
+  @Column({ nullable: true })
+  password?: string;
+
+  @Column({ nullable: true })
+  provider?: string;
+
+  @Column({ nullable: true })
+  providerId?: string;
 
   @Column({ default: true })
   isActive!: boolean;

@@ -4,7 +4,105 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Music, Eye, EyeOff, Check, Loader2 } from "lucide-react";
+import { Music, Eye, EyeOff, Check, Loader2, X } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
+
+const TERMS_OF_SERVICE = `제1조 (목적)
+이 약관은 KERO(이하 "서비스")가 제공하는 온라인 노래방 서비스의 이용과 관련하여, 서비스와 이용자 간의 권리, 의무 및 책임 사항을 규정함을 목적으로 합니다.
+
+제2조 (정의)
+1. "서비스"란 KERO가 제공하는 온라인 노래방, 노래 퀴즈 등 관련 서비스를 말합니다.
+2. "이용자"란 이 약관에 따라 서비스를 이용하는 회원을 말합니다.
+3. "회원"이란 서비스에 회원가입을 한 자를 말합니다.
+
+제3조 (약관의 효력)
+1. 이 약관은 서비스 화면에 게시하거나 기타의 방법으로 이용자에게 공지함으로써 효력이 발생합니다.
+2. 서비스는 필요한 경우 약관을 변경할 수 있으며, 변경된 약관은 공지함으로써 효력이 발생합니다.
+
+제4조 (회원가입)
+1. 이용자는 서비스가 정한 절차에 따라 회원가입을 신청합니다.
+2. 서비스는 다음 각 호에 해당하지 않는 한 회원가입을 승낙합니다.
+   - 타인의 정보를 이용한 경우
+   - 필수 정보를 허위로 기재한 경우
+
+제5조 (서비스 이용)
+1. 서비스 이용은 회원가입 후 가능합니다.
+2. 서비스는 업무상 또는 기술상 특별한 지장이 없는 한 연중무휴 24시간 제공합니다.
+
+제6조 (이용자의 의무)
+1. 이용자는 관련 법령 및 이 약관의 규정을 준수하여야 합니다.
+2. 이용자는 타인의 권리를 침해하는 행위를 하여서는 안 됩니다.
+3. 이용자는 서비스의 안정적 운영을 방해하는 행위를 하여서는 안 됩니다.
+
+제7조 (회원 탈퇴)
+회원은 언제든지 서비스에 탈퇴를 요청할 수 있으며, 서비스는 즉시 회원 탈퇴를 처리합니다.`;
+
+const PRIVACY_POLICY = `1. 개인정보의 수집 및 이용 목적
+KERO는 다음의 목적을 위하여 개인정보를 처리합니다.
+- 회원가입 및 관리: 회원 식별, 서비스 제공
+- 서비스 제공: 노래방 서비스, 퀴즈 기능 제공
+- 고객 지원: 문의 대응, 공지사항 전달
+
+2. 수집하는 개인정보 항목
+- 필수항목: 이름, 이메일, 연락처, 비밀번호
+- 선택항목: 프로필 이미지
+- 소셜 로그인 시: 소셜 계정 식별자, 이메일, 이름, 프로필 이미지
+
+3. 개인정보의 보유 및 이용 기간
+- 회원 탈퇴 시까지
+- 단, 관련 법령에 의한 보존 의무가 있는 경우 해당 기간까지
+
+4. 개인정보의 파기
+회원 탈퇴 시 개인정보는 지체 없이 파기합니다.
+
+5. 개인정보의 제3자 제공
+KERO는 이용자의 개인정보를 제3자에게 제공하지 않습니다. 단, 법령에 의한 경우는 예외로 합니다.
+
+6. 이용자의 권리
+이용자는 언제든지 자신의 개인정보를 조회, 수정, 삭제할 수 있으며 회원 탈퇴를 통해 개인정보 처리를 거부할 수 있습니다.
+
+7. 개인정보 보호책임자
+서비스 운영팀 (kero.support@email.com)`;
+
+function TermsModal({ isOpen, onClose, title, content }: { isOpen: boolean; onClose: () => void; title: string; content: string }) {
+  if (!isOpen) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        className="w-full max-w-lg max-h-[80vh] bg-zinc-900 border border-white/10 rounded-2xl relative flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-white/10">
+          <h2 className="text-lg font-bold text-white">{title}</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-6 overflow-y-auto">
+          <pre className="text-gray-300 text-sm whitespace-pre-wrap font-sans leading-relaxed">{content}</pre>
+        </div>
+        <div className="p-6 pt-4 border-t border-white/10">
+          <button
+            onClick={onClose}
+            className="w-full py-3 rounded-xl font-medium text-black bg-white hover:bg-gray-100 transition-colors"
+          >
+            확인
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -12,6 +110,8 @@ export default function SignupPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -185,8 +285,8 @@ export default function SignupPage() {
             <div className="flex items-start gap-2 text-sm">
               <input type="checkbox" required className="mt-1 rounded bg-white/5 border-white/10" />
               <span className="text-gray-400">
-                <Link href="#" className="text-[#C0C0C0] hover:text-white transition-colors">이용약관</Link> 및{" "}
-                <Link href="#" className="text-[#C0C0C0] hover:text-white transition-colors">개인정보처리방침</Link>에 동의합니다
+                <button type="button" onClick={() => setShowTerms(true)} className="text-[#C0C0C0] hover:text-white transition-colors underline underline-offset-2">이용약관</button> 및{" "}
+                <button type="button" onClick={() => setShowPrivacy(true)} className="text-[#C0C0C0] hover:text-white transition-colors underline underline-offset-2">개인정보처리방침</button>에 동의합니다
               </span>
             </div>
 
@@ -217,6 +317,13 @@ export default function SignupPage() {
             </p>
           </div>
         </div>
+
+        <AnimatePresence>
+          <TermsModal isOpen={showTerms} onClose={() => setShowTerms(false)} title="이용약관" content={TERMS_OF_SERVICE} />
+        </AnimatePresence>
+        <AnimatePresence>
+          <TermsModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} title="개인정보처리방침" content={PRIVACY_POLICY} />
+        </AnimatePresence>
       </motion.div>
     </div>
   );

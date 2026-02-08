@@ -1,5 +1,5 @@
 import { DataSource } from "typeorm";
-import { User, Song, LyricsLine, Room, RoomParticipant, Score, LyricsQuizQuestion } from "../entities";
+import { User, Song, LyricsLine, Room, RoomParticipant, Score, LyricsQuizQuestion, EmailVerification } from "../entities";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -13,7 +13,7 @@ export const AppDataSource = new DataSource({
   database: process.env.DB_DATABASE || "kero",
   synchronize: true, // Auto-create tables (OK for demo project)
   logging: process.env.NODE_ENV === "development",
-  entities: [User, Song, LyricsLine, Room, RoomParticipant, Score, LyricsQuizQuestion],
+  entities: [User, Song, LyricsLine, Room, RoomParticipant, Score, LyricsQuizQuestion, EmailVerification],
   migrations: ["src/migrations/**/*.ts"],
   subscribers: ["src/subscribers/**/*.ts"],
 });

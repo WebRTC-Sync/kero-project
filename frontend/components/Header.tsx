@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, UserPlus, LogOut, X, Loader2, Camera, Mail, Calendar, Check } from "lucide-react";
+import { User, UserPlus, LogOut, X, Loader2, Camera, Mail, Calendar, Check, Trash2, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface UserData {
@@ -22,6 +22,8 @@ export default function Header() {
   const [nickname, setNickname] = useState("");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -109,6 +111,27 @@ export default function Header() {
             setSaving(false);
             setShowProfileModal(false);
         }, 400);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/auth/account", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        setUser(null);
+        setShowProfileModal(false);
+        setShowDeleteConfirm(false);
+        router.push("/");
+      }
+    } catch {
+      setDeleting(false);
     }
   };
 
@@ -300,6 +323,41 @@ export default function Header() {
                       "저장"
                     )}
                   </button>
+
+                  <div className="mt-6 pt-4 border-t border-white/5">
+                    {!showDeleteConfirm ? (
+                      <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="w-full py-2.5 rounded-xl text-sm text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        회원 탈퇴
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-red-400 text-sm">
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                          <span>탈퇴하면 모든 데이터가 삭제됩니다.</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="flex-1 py-2.5 rounded-xl text-sm text-gray-400 bg-white/5 hover:bg-white/10 transition-colors"
+                          >
+                            취소
+                          </button>
+                          <button
+                            onClick={handleDeleteAccount}
+                            disabled={deleting}
+                            className="flex-1 py-2.5 rounded-xl text-sm text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                          >
+                            {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                            탈퇴하기
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </motion.div>

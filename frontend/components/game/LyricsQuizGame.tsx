@@ -8,13 +8,6 @@ import type { RootState } from "@/store";
 import { selectAnswer, nextQuestion, revealAnswer, setGameStatus, updateStreak, resetQuiz, setQuizQuestions } from "@/store/slices/gameSlice";
 import { useSocket } from "@/hooks/useSocket";
 
-declare global {
-  interface Window {
-    YT: any;
-    onYouTubeIframeAPIReady: (() => void) | undefined;
-  }
-}
-
 const KAHOOT_COLORS = [
   { bg: "#E21B3C", ring: "ring-[#E21B3C]", shape: "▲", name: "red" },
   { bg: "#1368CE", ring: "ring-[#1368CE]", shape: "◆", name: "blue" },
@@ -112,10 +105,7 @@ export default function LyricsQuizGame({
    const [wrongCount, setWrongCount] = useState(0);
    const [maxStreakLocal, setMaxStreakLocal] = useState(0);
    const [localIdentity, setLocalIdentity] = useState<{ id: string; name: string }>({ id: "", name: "" });
-   const [ytApiReady, setYtApiReady] = useState(false);
-   const ytPlayerRef = useRef<any>(null);
-   const ytContainerRef = useRef<HTMLDivElement>(null);
-   const pendingVideoRef = useRef<string | null>(null);
+   const [youtubeVideoId, setYoutubeVideoId] = useState<string | null>(null);
 
    useEffect(() => {
      const userRaw = localStorage.getItem("user");
@@ -130,68 +120,6 @@ export default function LyricsQuizGame({
        setLocalIdentity({ id: "", name: "" });
      }
    }, []);
-
-   // Load YouTube IFrame API once
-   useEffect(() => {
-     if (window.YT && window.YT.Player) {
-       setYtApiReady(true);
-       return;
-     }
-     const prev = window.onYouTubeIframeAPIReady;
-     window.onYouTubeIframeAPIReady = () => {
-       setYtApiReady(true);
-       if (prev) prev();
-     };
-     if (!document.getElementById("yt-iframe-api")) {
-       const tag = document.createElement("script");
-       tag.id = "yt-iframe-api";
-       tag.src = "https://www.youtube.com/iframe_api";
-       document.head.appendChild(tag);
-     }
-   }, []);
-
-   // Create persistent YT Player instance once API is ready
-   useEffect(() => {
-     if (!ytApiReady || ytPlayerRef.current || !ytContainerRef.current) return;
-
-     ytPlayerRef.current = new window.YT.Player(ytContainerRef.current, {
-       width: 1,
-       height: 1,
-       playerVars: {
-         autoplay: 0,
-         controls: 0,
-         disablekb: 1,
-         fs: 0,
-         modestbranding: 1,
-         rel: 0,
-         playsinline: 1,
-       },
-       events: {
-         onReady: () => {
-           // If a video was queued before the player was ready, play it now
-           if (pendingVideoRef.current) {
-             const vid = pendingVideoRef.current;
-             pendingVideoRef.current = null;
-             ytPlayerRef.current?.loadVideoById({ videoId: vid, startSeconds: 30 });
-             setTimeout(() => {
-               try {
-                 ytPlayerRef.current?.unMute();
-                 ytPlayerRef.current?.setVolume(50);
-               } catch {}
-             }, 300);
-           }
-         },
-         onError: (e: any) => {
-           console.warn("[YT Player] Error:", e.data);
-         },
-       },
-     });
-
-     return () => {
-       try { ytPlayerRef.current?.destroy(); } catch {}
-       ytPlayerRef.current = null;
-     };
-   }, [ytApiReady]);
 
     const cleanDisplay = (s: string) => s?.replace(/\s*[\(（\[【].*?[\)）\]】]/g, '').replace(/[\(（\[【\)）\]】]/g, '').trim() || '';
 
@@ -251,7 +179,7 @@ export default function LyricsQuizGame({
         audioRef.current.pause();
         audioRef.current = null;
       }
-      try { ytPlayerRef.current?.pauseVideo(); } catch {}
+      setYoutubeVideoId(null);
       return;
     }
     
@@ -259,7 +187,7 @@ export default function LyricsQuizGame({
     const ytVideoId = currentQuestion.metadata?.youtubeVideoId;
     
     if (audioUrl) {
-      try { ytPlayerRef.current?.pauseVideo(); } catch {}
+      setYoutubeVideoId(null);
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
       const startTime = currentQuestion.metadata?.audioStartTime || 0;
@@ -271,34 +199,24 @@ export default function LyricsQuizGame({
         audio.pause();
         audio.src = '';
         audioRef.current = null;
+        setYoutubeVideoId(null);
       };
     } else if (ytVideoId) {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
-      const player = ytPlayerRef.current;
-      if (player && typeof player.loadVideoById === "function") {
-        player.loadVideoById({ videoId: ytVideoId, startSeconds: 30 });
-        setTimeout(() => {
-          try {
-            player.unMute();
-            player.setVolume(50);
-          } catch {}
-        }, 300);
-      } else {
-        pendingVideoRef.current = ytVideoId;
-      }
+      setYoutubeVideoId(ytVideoId);
       
       return () => {
-        try { ytPlayerRef.current?.pauseVideo(); } catch {}
+        setYoutubeVideoId(null);
       };
     } else {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
-      try { ytPlayerRef.current?.pauseVideo(); } catch {}
+      setYoutubeVideoId(null);
     }
   }, [currentQuestionIndex, currentQuestion]);
 
@@ -352,7 +270,7 @@ export default function LyricsQuizGame({
           audioRef.current.pause();
           audioRef.current = null;
         }
-        try { ytPlayerRef.current?.pauseVideo(); } catch {}
+        setYoutubeVideoId(null);
         dispatch(nextQuestion());
         advanceTimeoutRef.current = null;
       }, advanceDelay);
@@ -366,10 +284,10 @@ export default function LyricsQuizGame({
    const handleSelectAnswer = (index: number) => {
      if (submitted || isAnswerRevealed) return;
      setSubmitted(true);
-      if (audioRef.current) {
+     if (audioRef.current) {
         audioRef.current.pause();
       }
-      try { ytPlayerRef.current?.pauseVideo(); } catch {}
+      setYoutubeVideoId(null);
       dispatch(selectAnswer(index));
      
      let answerValue: any = "";
@@ -407,10 +325,10 @@ export default function LyricsQuizGame({
    const handleOrderSubmit = () => {
      if (submitted || isAnswerRevealed || ordering.length !== 4) return;
      setSubmitted(true);
-      if (audioRef.current) {
+     if (audioRef.current) {
         audioRef.current.pause();
       }
-      try { ytPlayerRef.current?.pauseVideo(); } catch {}
+      setYoutubeVideoId(null);
       
       const correctOrder = currentQuestion.correctOrder || [0, 1, 2, 3];
      const isCorrect = JSON.stringify(ordering) === JSON.stringify(correctOrder);
@@ -438,10 +356,10 @@ export default function LyricsQuizGame({
      e?.preventDefault();
      if (submitted || isAnswerRevealed || !textAnswer.trim()) return;
      setSubmitted(true);
-      if (audioRef.current) {
+     if (audioRef.current) {
         audioRef.current.pause();
       }
-      try { ytPlayerRef.current?.pauseVideo(); } catch {}
+      setYoutubeVideoId(null);
 
       const normalize = (s: string) => s.replace(/\s*[\(（\[【].*?[\)）\]】]/g, '').replace(/[\(（\[【\)）\]】]/g, '').replace(/\s/g, '').toLowerCase();
      const isCorrect = normalize(textAnswer.trim()) === normalize(currentQuestion.correctAnswer || "");
@@ -543,8 +461,8 @@ export default function LyricsQuizGame({
        audioRef.current.pause();
        audioRef.current = null;
      }
-     try { ytPlayerRef.current?.pauseVideo(); } catch {}
-     dispatch(resetQuiz());
+      setYoutubeVideoId(null);
+      dispatch(resetQuiz());
      if (onBack) {
        onBack();
        return;
@@ -906,7 +824,6 @@ export default function LyricsQuizGame({
 
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-[#46178F] to-[#1D0939] font-sans flex flex-col">
-      <div ref={ytContainerRef} className="absolute w-1 h-1 opacity-0 pointer-events-none" />
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none"></div>
 
       <div className="relative z-10 flex-1 flex flex-col p-3 min-w-0 min-h-0">
@@ -981,7 +898,7 @@ export default function LyricsQuizGame({
             <div className="w-full min-h-[170px] sm:min-h-[220px] bg-white rounded-2xl shadow-2xl flex flex-col items-center justify-center p-4 sm:p-8 text-center relative overflow-hidden group">
               <div className="absolute top-0 left-0 w-full h-2 bg-[#46178F]"></div>
 
-              {getQuestionHeader() && (
+              {!isAudioQuestion && getQuestionHeader() && (
                 <div className="absolute top-4 left-0 w-full text-center z-10 pointer-events-none">
                   <span className="px-3 py-0.5 sm:px-4 sm:py-1 bg-gray-100 rounded-full text-gray-600 text-xs sm:text-sm font-bold uppercase tracking-wide">
                     {getQuestionHeader()}
@@ -989,7 +906,22 @@ export default function LyricsQuizGame({
                 </div>
               )}
 
-              {isAudioQuestion ? (
+              {isAudioQuestion && youtubeVideoId ? (
+                <div className="absolute inset-0 rounded-2xl overflow-hidden">
+                  <iframe
+                    key={`${youtubeVideoId}-${currentQuestionIndex}`}
+                    src={`https://www.youtube-nocookie.com/embed/${youtubeVideoId}?autoplay=1&start=30&controls=0&showinfo=0&rel=0&modestbranding=1`}
+                    allow="autoplay; encrypted-media"
+                    className="w-full h-full"
+                    title="quiz-video"
+                  />
+                  <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/60 to-transparent">
+                    <span className="px-3 py-1 bg-black/50 rounded-full text-white text-xs sm:text-sm font-bold">
+                      {getQuestionHeader()}
+                    </span>
+                  </div>
+                </div>
+              ) : isAudioQuestion ? (
                 <div className="flex flex-col items-center justify-center gap-3">
                   <Music className="w-16 h-16 text-[#46178F]" />
                   <span className="text-lg sm:text-xl font-bold text-gray-500">노래를 듣고 맞춰보세요</span>
@@ -1038,7 +970,7 @@ export default function LyricsQuizGame({
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className={`fixed bottom-0 left-0 right-0 h-auto py-6 sm:h-48 sm:py-0 z-50 flex items-center justify-center
+            className={`fixed bottom-0 left-0 right-0 lg:right-[280px] h-auto py-6 sm:h-48 sm:py-0 z-40 flex items-center justify-center
               ${roundResults.find(r => r.odId === "local" || r.odName === "나")?.isCorrect ? "bg-[#26890C]" : "bg-[#E21B3C]"}
             `}
           >

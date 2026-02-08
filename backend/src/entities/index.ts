@@ -5,3 +5,4 @@ export { Room, GameMode, RoomStatus } from "./Room";
 export { RoomParticipant } from "./RoomParticipant";
 export { Score } from "./Score";
 export { LyricsQuizQuestion, QuizType } from "./LyricsQuizQuestion";
+export { EmailVerification } from "./EmailVerification";
