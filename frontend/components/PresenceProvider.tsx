@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import { useMouse } from "../hooks/use-mouse";
 import { useThrottle } from "../hooks/use-throttle";
@@ -75,6 +75,8 @@ export default function PresenceProvider({ children }: { children: React.ReactNo
   const [data, setData] = useState<PresenceData>({ count: 0, users: [] });
   const [socketId, setSocketId] = useState<string | null>(null);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const fullPath = searchParams?.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
   const socketRef = useRef<Socket | null>(null);
   const emojiListenersRef = useRef<((data: EmojiData) => void)[]>([]);
   const soundListenersRef = useRef<((data: SoundData) => void)[]>([]);
@@ -137,7 +139,7 @@ export default function PresenceProvider({ children }: { children: React.ReactNo
       socket.emit("presence:join", {
         nickname: user?.name || "Guest",
         profileImage: user?.profileImage || null,
-        currentPage: window.location.pathname,
+        currentPage: window.location.pathname + window.location.search,
         color: getRandomColor(),
       });
     });
@@ -174,9 +176,9 @@ export default function PresenceProvider({ children }: { children: React.ReactNo
 
   useEffect(() => {
     if (socketRef.current?.connected) {
-      socketRef.current.emit("presence:page", { currentPage: pathname });
+      socketRef.current.emit("presence:page", { currentPage: fullPath });
     }
-  }, [pathname]);
+  }, [fullPath]);
 
   return (
     <PresenceContext.Provider

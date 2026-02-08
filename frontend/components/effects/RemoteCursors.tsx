@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { usePresence, EmojiData } from "../PresenceProvider";
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { MousePointer2 } from "lucide-react";
@@ -19,10 +19,12 @@ const normalizePathWithoutTrailingSlash = (path: string | undefined | null): str
 export default function RemoteCursors() {
   const { users, socketId, registerEmojiListener } = usePresence();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const fullPath = searchParams?.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [remoteEmojis, setRemoteEmojis] = useState<RemoteEmoji[]>([]);
 
-  const normalizedPathname = useMemo(() => normalizePathWithoutTrailingSlash(pathname), [pathname]);
+  const normalizedPathname = useMemo(() => normalizePathWithoutTrailingSlash(fullPath), [fullPath]);
 
   useEffect(() => {
     return registerEmojiListener((data) => {

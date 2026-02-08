@@ -162,9 +162,10 @@ router.get("/audio-stream", async (req: Request, res: Response) => {
   req.on("close", () => abort.abort());
 
   try {
-    res.setHeader("Content-Type", "audio/webm");
+    res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Transfer-Encoding", "chunked");
+    res.setHeader("Accept-Ranges", "none");
 
     await youtubeService.pipeAudioStream(
       videoId,

@@ -56,19 +56,28 @@ export default function OnlineIndicator() {
   }, [expanded]);
 
   const getPageName = (path: string) => {
-    if (path === '/') return '메인';
-    if (path === '/lobby') return '로비';
-    if (path === '/mode/normal') return '일반모드 로비';
-    if (path === '/mode/lyrics-quiz') return '노래퀴즈 로비';
-    if (path === '/mode/perfect-score') return '퍼펙트스코어 로비';
-    if (path.startsWith('/mode/')) return '모드 선택';
-    if (path.startsWith('/room/')) {
-      const code = path.split('/room/')[1]?.split('/')[0] || '';
+    const [pathname, query] = path.split('?');
+    const params = new URLSearchParams(query || '');
+    const mode = params.get('mode');
+
+    if (pathname === '/') return '메인';
+    if (pathname === '/lobby') {
+      if (mode === 'normal') return '일반모드 로비';
+      if (mode === 'lyrics_quiz') return '노래퀴즈 로비';
+      if (mode === 'perfect_score') return '퍼펙트스코어 로비';
+      return '로비';
+    }
+    if (pathname === '/mode/normal') return '일반모드';
+    if (pathname === '/mode/lyrics-quiz') return '노래퀴즈';
+    if (pathname === '/mode/perfect-score') return '퍼펙트스코어';
+    if (pathname?.startsWith('/mode/')) return '모드 선택';
+    if (pathname?.startsWith('/room/')) {
+      const code = pathname.split('/room/')[1]?.split('/')[0] || '';
       return `게임방 (${code})`;
     }
-    if (path === '/login') return '로그인';
-    if (path === '/signup') return '회원가입';
-    if (path === '/forgot-password') return '비밀번호 찾기';
+    if (pathname === '/login') return '로그인';
+    if (pathname === '/signup') return '회원가입';
+    if (pathname === '/forgot-password') return '비밀번호 찾기';
     return '탐색 중';
   };
 

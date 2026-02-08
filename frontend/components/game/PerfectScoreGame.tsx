@@ -3,9 +3,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { AnimatePresence, motion } from "framer-motion";
-import { Play, Pause, Volume2, Mic, MicOff, RotateCcw, SkipForward, AlertCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mic, MicOff, Pause, Play, RotateCcw, SkipForward, Volume2, AlertCircle } from "lucide-react";
 import type { RootState } from "@/store";
 import { updateCurrentTime, setGameStatus } from "@/store/slices/gameSlice";
+import { getSocket } from "@/lib/socket";
 
 interface LyricsWord {
   startTime: number;
@@ -23,14 +24,24 @@ interface LyricsLine {
   words?: LyricsWord[];
 }
 
+interface FinalScoreLike {
+  participantId?: number | string;
+  nickname?: string;
+  totalScore?: number;
+  score?: number;
+  odId?: string;
+  odName?: string;
+}
+
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const VISIBLE_WINDOW = 8;
 const HIT_LINE_RATIO = 0.2;
 const MIDI_MIN = 36;
-const MIDI_MAX = 83;
+const MIDI_MAX = 76;
 const USER_TRAIL_SECONDS = 4;
-const RAIL_HEIGHT = 8;
-const LABEL_AREA_WIDTH = 54;
+const LABEL_AREA_WIDTH = 64;
+const SMOOTHING_WINDOW_SIZE = 5;
+const SNAP_MIDI_THRESHOLD = 0.35;
 
 type JudgmentLabel = "PERFECT" | "GREAT" | "GOOD" | "NORMAL" | "BAD";
 
@@ -68,11 +79,11 @@ const getGrade = (scorePercent: number) => {
 };
 
 const JUDGMENT_SEGMENTS: { key: JudgmentLabel; label: string; color: string }[] = [
-  { key: "PERFECT", label: "PERFECT", color: "#FFD700" },
-  { key: "GREAT", label: "GREAT", color: "#34D399" },
-  { key: "GOOD", label: "GOOD", color: "#60A5FA" },
-  { key: "NORMAL", label: "NORMAL", color: "#A78BFA" },
-  { key: "BAD", label: "BAD", color: "#EF4444" },
+  { key: "PERFECT", label: "PERFECT", color: "#10b981" },
+  { key: "GREAT", label: "GREAT", color: "#4ecdc4" },
+  { key: "GOOD", label: "GOOD", color: "#93c5fd" },
+  { key: "NORMAL", label: "NORMAL", color: "#f0c040" },
+  { key: "BAD", label: "BAD", color: "#f28b82" },
 ];
 
 const RADAR_LABELS = ["음정", "박자", "바이브레이션", "표현력", "안정도"];
@@ -81,15 +92,17 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const midiToFreq = (midi: number) => 440 * Math.pow(2, (midi - 69) / 12);
 const freqToMidi = (frequency: number) => 69 + 12 * Math.log2(frequency / 440);
 
-const formatTime = (time: number) => {
-  const mins = Math.floor(time / 60);
-  const secs = Math.floor(time % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
+const midiToNoteLabel = (midi: number) => {
+  const roundedMidi = Math.round(midi);
+  const note = NOTE_NAMES[((roundedMidi % 12) + 12) % 12];
+  const octave = Math.floor(roundedMidi / 12) - 1;
+  return `${note}${octave}`;
 };
 
 export default function PerfectScoreGame() {
   const dispatch = useDispatch();
-  const { currentSong, status, songQueue } = useSelector((state: RootState) => state.game);
+  const { currentSong, status, songQueue, scores } = useSelector((state: RootState) => state.game);
+  const { participants, code: roomCode } = useSelector((state: RootState) => state.room);
 
   const rafRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -112,6 +125,10 @@ export default function PerfectScoreGame() {
   const lastJudgmentRef = useRef<JudgmentLabel | null>(null);
   const statsRef = useRef<GameStats>(createInitialStats());
   const radarCanvasRef = useRef<HTMLCanvasElement>(null);
+  const smoothingMidiRef = useRef<number[]>([]);
+  const lastPitchEmitAtRef = useRef(0);
+  const singerScoreSnapshotRef = useRef<Record<string, number>>({});
+  const previousSingerIdRef = useRef<number | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMicOn, setIsMicOn] = useState(true);
@@ -123,12 +140,47 @@ export default function PerfectScoreGame() {
   const [currentLyricIndex, setCurrentLyricIndex] = useState(-1);
   const [volume, setVolume] = useState(1);
   const [scorePopups, setScorePopups] = useState<{ id: number; type: string; points: number }[]>([]);
+  const [currentSingerId, setCurrentSingerId] = useState<number | null>(null);
+  const [currentSingerNickname, setCurrentSingerNickname] = useState("");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [snapIndicatorActive, setSnapIndicatorActive] = useState(false);
+  const [snapNoteLabel, setSnapNoteLabel] = useState("");
+  const [turnScores, setTurnScores] = useState<Record<string, number>>({});
 
   const lyrics: LyricsLine[] = currentSong?.lyrics || [];
   const audioUrl = currentSong?.instrumentalUrl || currentSong?.audioUrl;
   const progress = duration ? (localTime / duration) * 100 : 0;
 
-  isMicOnRef.current = isMicOn;
+  const myNickname = useMemo(() => {
+    const fromSession = sessionStorage.getItem("roomNickname");
+    if (fromSession) return fromSession;
+    const userString = localStorage.getItem("user");
+    if (!userString) return "";
+    try {
+      const parsed = JSON.parse(userString) as { name?: string };
+      return parsed.name || "";
+    } catch {
+      return "";
+    }
+  }, []);
+
+  const myParticipant = useMemo(() => {
+    return participants.find((participant) => participant.nickname === myNickname) || null;
+  }, [myNickname, participants]);
+
+  const isMyTurn = useMemo(() => {
+    if (currentSingerId !== null && myParticipant) {
+      return String(currentSingerId) === String(myParticipant.id);
+    }
+    if (currentSingerNickname && myNickname) {
+      return currentSingerNickname === myNickname;
+    }
+    return false;
+  }, [currentSingerId, currentSingerNickname, myNickname, myParticipant]);
+
+  const turnOrder = useMemo(() => {
+    return participants.map((participant) => participant.id);
+  }, [participants]);
 
   const words = useMemo(() => {
     if (!lyrics.length) return [] as Array<LyricsWord & { lineIndex: number; wordIndex: number }>;
@@ -143,11 +195,40 @@ export default function PerfectScoreGame() {
     return list;
   }, [lyrics]);
 
+  const resetRoundMetrics = useCallback(() => {
+    lastTimeRef.current = 0;
+    scoreRef.current = 0;
+    comboRef.current = 0;
+    setScore(0);
+    setCombo(0);
+    setLocalTime(0);
+    setCurrentLyricIndex(-1);
+    setScorePopups([]);
+    userPitchTrailRef.current = [];
+    scoredResultsRef.current.clear();
+    pitchSamplesRef.current.clear();
+    judgementPopupsRef.current = [];
+    lastJudgmentRef.current = null;
+    latestPitchRef.current = { frequency: 0, time: 0 };
+    smoothingMidiRef.current = [];
+    statsRef.current = createInitialStats();
+    statsRef.current.totalWords = words.length;
+  }, [words.length]);
+
   useEffect(() => {
     statsRef.current = createInitialStats();
     statsRef.current.totalWords = words.length;
     lastJudgmentRef.current = null;
   }, [currentSong, words.length]);
+
+  useEffect(() => {
+    if (!participants.length) return;
+    if (currentSingerId !== null || currentSingerNickname) return;
+
+    const first = participants[0];
+    setCurrentSingerId(typeof first.id === "number" ? first.id : Number(first.id));
+    setCurrentSingerNickname(first.nickname);
+  }, [currentSingerId, currentSingerNickname, participants]);
 
   const findCurrentLyricIndex = useCallback(
     (time: number): number => {
@@ -186,8 +267,11 @@ export default function PerfectScoreGame() {
     if (currentLyricIndex >= 0) {
       return lyrics[currentLyricIndex + 1] || null;
     }
-    return lyrics.find(line => line.startTime > localTime) || null;
+    return lyrics.find((line) => line.startTime > localTime) || null;
   }, [currentLyricIndex, lyrics, localTime]);
+
+  const shouldCaptureMic = isMicOn && isMyTurn;
+  isMicOnRef.current = shouldCaptureMic;
 
   const startMicrophone = useCallback(async () => {
     try {
@@ -209,7 +293,7 @@ export default function PerfectScoreGame() {
 
   const stopMicrophone = useCallback(() => {
     if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
     if (audioContextRef.current) {
@@ -227,7 +311,8 @@ export default function PerfectScoreGame() {
 
     const handleEnded = () => {
       setIsPlaying(false);
-      dispatch(setGameStatus("finished"));
+      if (!roomCode || !isMyTurn) return;
+      getSocket().emit("perfect:end-song", { roomCode });
     };
 
     const handleCanPlay = () => setAudioLoaded(true);
@@ -247,7 +332,7 @@ export default function PerfectScoreGame() {
       audio.removeEventListener("canplay", handleCanPlay);
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
     };
-  }, [dispatch, volume]);
+  }, [isMyTurn, roomCode, volume]);
 
   useEffect(() => {
     if (!audioRef.current || !audioLoaded) return;
@@ -266,14 +351,44 @@ export default function PerfectScoreGame() {
   }, [audioLoaded, isPlaying, status]);
 
   useEffect(() => {
-    if (!isMicOn) {
+    if (!shouldCaptureMic) {
       stopMicrophone();
       return;
     }
     if (!analyserRef.current) {
       startMicrophone();
     }
-  }, [isMicOn, startMicrophone, stopMicrophone]);
+  }, [shouldCaptureMic, startMicrophone, stopMicrophone]);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleTurnChanged = (payload: { currentSingerId: number; currentSingerNickname: string }) => {
+      const prevSingerId = previousSingerIdRef.current;
+      if (prevSingerId !== null) {
+        singerScoreSnapshotRef.current[String(prevSingerId)] = Math.round(scoreRef.current);
+        setTurnScores({ ...singerScoreSnapshotRef.current });
+      }
+
+      previousSingerIdRef.current = payload.currentSingerId;
+      setCurrentSingerId(payload.currentSingerId);
+      setCurrentSingerNickname(payload.currentSingerNickname);
+      resetRoundMetrics();
+
+      if (!audioRef.current) return;
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      if (status === "playing") {
+        audioRef.current.play().catch(console.error);
+        setIsPlaying(true);
+      }
+    };
+
+    socket.on("perfect:turn-changed", handleTurnChanged);
+    return () => {
+      socket.off("perfect:turn-changed", handleTurnChanged);
+    };
+  }, [resetRoundMetrics, status]);
 
   const togglePlay = useCallback(() => {
     if (!audioRef.current || !audioLoaded) return;
@@ -283,33 +398,19 @@ export default function PerfectScoreGame() {
       setIsPlaying(false);
     } else {
       audioRef.current.play().catch(console.error);
-      if (isMicOn && !analyserRef.current) {
+      if (shouldCaptureMic && !analyserRef.current) {
         startMicrophone();
       }
       dispatch(setGameStatus("playing"));
       setIsPlaying(true);
     }
-  }, [audioLoaded, dispatch, isMicOn, isPlaying, startMicrophone]);
+  }, [audioLoaded, dispatch, isPlaying, shouldCaptureMic, startMicrophone]);
 
   const handleRestart = useCallback(() => {
     if (!audioRef.current) return;
     audioRef.current.currentTime = 0;
-    lastTimeRef.current = 0;
-    setLocalTime(0);
-    setCurrentLyricIndex(-1);
-    scoreRef.current = 0;
-    comboRef.current = 0;
-    setScore(0);
-    setCombo(0);
-    setScorePopups([]);
-    userPitchTrailRef.current = [];
-    scoredResultsRef.current.clear();
-    pitchSamplesRef.current.clear();
-    judgementPopupsRef.current = [];
-    lastJudgmentRef.current = null;
-    statsRef.current = createInitialStats();
-    statsRef.current.totalWords = words.length;
-  }, [words.length]);
+    resetRoundMetrics();
+  }, [resetRoundMetrics]);
 
   const handleSeek = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -322,6 +423,13 @@ export default function PerfectScoreGame() {
     },
     [duration]
   );
+
+  const passTurn = useCallback(() => {
+    if (!roomCode || !isMyTurn) return;
+    singerScoreSnapshotRef.current[String(currentSingerId)] = Math.round(scoreRef.current);
+    setTurnScores({ ...singerScoreSnapshotRef.current });
+    getSocket().emit("perfect:pass-turn", { roomCode });
+  }, [currentSingerId, isMyTurn, roomCode]);
 
   const autoCorrelate = (buffer: Float32Array, sampleRate: number): number => {
     let size = buffer.length;
@@ -402,17 +510,34 @@ export default function PerfectScoreGame() {
       analyserRef.current.getFloatTimeDomainData(buffer);
       const frequency = autoCorrelate(buffer, audioContextRef.current.sampleRate);
 
-       if (frequency > 0) {
-         latestPitchRef.current = { frequency, time: now };
-         const rawMidi = freqToMidi(frequency);
-         userPitchTrailRef.current.push({ time: now, midi: rawMidi });
-       }
+      if (frequency > 0) {
+        latestPitchRef.current = { frequency, time: now };
+        const rawMidi = freqToMidi(frequency);
+        smoothingMidiRef.current.push(rawMidi);
+        if (smoothingMidiRef.current.length > SMOOTHING_WINDOW_SIZE) {
+          smoothingMidiRef.current.shift();
+        }
+        const smoothedMidi = smoothingMidiRef.current.reduce((sum, value) => sum + value, 0) / smoothingMidiRef.current.length;
+        userPitchTrailRef.current.push({ time: now, midi: smoothedMidi });
+
+        if (roomCode && now - lastPitchEmitAtRef.current > 0.12) {
+          getSocket().emit("perfect:pitch-data", {
+            roomCode,
+            pitchData: {
+              time: now,
+              frequency,
+              confidence: 0.9,
+            },
+          });
+          lastPitchEmitAtRef.current = now;
+        }
+      }
     }
 
-    userPitchTrailRef.current = userPitchTrailRef.current.filter(point => now - point.time <= USER_TRAIL_SECONDS);
+    userPitchTrailRef.current = userPitchTrailRef.current.filter((point) => now - point.time <= USER_TRAIL_SECONDS);
 
     if (isMicOnRef.current && latestPitchRef.current.frequency > 0) {
-      words.forEach(word => {
+      words.forEach((word) => {
         if (now >= word.startTime && now <= word.endTime && typeof word.midi === "number") {
           const key = `${word.lineIndex}-${word.wordIndex}`;
           const list = pitchSamplesRef.current.get(key) || [];
@@ -422,7 +547,7 @@ export default function PerfectScoreGame() {
       });
     }
 
-    words.forEach(word => {
+    words.forEach((word) => {
       if (typeof word.midi !== "number") return;
       if (now <= word.endTime) return;
       const key = `${word.lineIndex}-${word.wordIndex}`;
@@ -489,11 +614,11 @@ export default function PerfectScoreGame() {
         scoreRef.current += points;
         setScore(scoreRef.current);
         setCombo(comboRef.current);
-        setScorePopups(prev => [...prev.slice(-3), { id: popupId, type: result, points }]);
+        setScorePopups((prev) => [...prev.slice(-3), { id: popupId, type: result, points }]);
       } else {
         comboRef.current = 0;
         setCombo(0);
-        setScorePopups(prev => [...prev.slice(-3), { id: popupId, type: "MISS", points: 0 }]);
+        setScorePopups((prev) => [...prev.slice(-3), { id: popupId, type: "MISS", points: 0 }]);
       }
 
       statsRef.current.maxCombo = Math.max(statsRef.current.maxCombo, comboRef.current);
@@ -505,7 +630,7 @@ export default function PerfectScoreGame() {
         time: now,
         x: 0,
         y: yForPopup,
-        color: result === "PERFECT" ? "#FFD700" : result === "GREAT" ? "#34D399" : result === "GOOD" ? "#60A5FA" : "#777777",
+        color: result === "PERFECT" ? "#10b981" : result === "GREAT" ? "#4ecdc4" : result === "GOOD" ? "#93c5fd" : "#f28b82",
       });
     });
 
@@ -527,36 +652,17 @@ export default function PerfectScoreGame() {
 
       ctx.clearRect(0, 0, width, height);
 
-      const background = ctx.createLinearGradient(0, 0, 0, height);
-      background.addColorStop(0, "#0E041A");
-      background.addColorStop(1, "#050814");
+      const background = ctx.createLinearGradient(0, 0, width, height);
+      background.addColorStop(0, "#0a0a1a");
+      background.addColorStop(0.6, "#111a2f");
+      background.addColorStop(1, "#1a1a2e");
       ctx.fillStyle = background;
       ctx.fillRect(0, 0, width, height);
 
-      const drawRail = (y: number) => {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, y, width, RAIL_HEIGHT);
-        ctx.clip();
-        const stripeWidth = 12;
-        for (let x = -width; x < width * 2; x += stripeWidth) {
-          ctx.strokeStyle = (Math.floor(x / stripeWidth) % 2 === 0) ? "#00F2FF" : "#111111";
-          ctx.lineWidth = 6;
-          ctx.beginPath();
-          ctx.moveTo(x, y + RAIL_HEIGHT + 6);
-          ctx.lineTo(x + RAIL_HEIGHT * 2, y - 6);
-          ctx.stroke();
-        }
-        ctx.restore();
-      };
-
-      drawRail(0);
-      drawRail(height - RAIL_HEIGHT);
-
-      const contentTop = RAIL_HEIGHT + 8;
-      const contentBottom = height - RAIL_HEIGHT - 8;
+      const contentTop = 16;
+      const contentBottom = height - 16;
       const staffHeight = Math.max(1, contentBottom - contentTop);
-      const hitLineX = Math.max(width * HIT_LINE_RATIO, LABEL_AREA_WIDTH + 12);
+      const hitLineX = Math.max(width * HIT_LINE_RATIO, LABEL_AREA_WIDTH + 16);
       const pixelsPerSecond = width / VISIBLE_WINDOW;
       const leftWindow = VISIBLE_WINDOW * HIT_LINE_RATIO;
       const rightWindow = VISIBLE_WINDOW - leftWindow;
@@ -570,7 +676,7 @@ export default function PerfectScoreGame() {
 
       const beatInterval = 1.0;
       const firstBeat = Math.ceil(startTime / beatInterval) * beatInterval;
-      ctx.strokeStyle = "rgba(255,255,255,0.04)";
+      ctx.strokeStyle = "rgba(255,255,255,0.06)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let t = firstBeat; t < endTime; t += beatInterval) {
@@ -593,43 +699,38 @@ export default function PerfectScoreGame() {
         ctx.lineTo(width, y);
 
         if (isC) {
-          ctx.lineWidth = 1.5;
-          ctx.strokeStyle = "rgba(255,255,255,0.20)";
-          ctx.setLineDash([]);
+          ctx.lineWidth = 1.4;
+          ctx.strokeStyle = "rgba(240,192,64,0.28)";
           ctx.stroke();
           const octave = Math.floor(midi / 12) - 1;
-          ctx.fillStyle = "rgba(255,255,255,0.70)";
-          ctx.font = "bold 11px 'Noto Sans KR', 'Rajdhani', sans-serif";
-          ctx.fillText(`C${octave}`, LABEL_AREA_WIDTH - 6, y);
+          ctx.fillStyle = "rgba(240,192,64,0.95)";
+          ctx.font = "600 12px 'DM Sans', 'Noto Sans KR', sans-serif";
+          ctx.fillText(`C${octave}`, LABEL_AREA_WIDTH - 8, y);
         } else if (isNatural) {
-          ctx.lineWidth = 0.8;
-          ctx.strokeStyle = "rgba(255,255,255,0.08)";
-          ctx.setLineDash([]);
-          ctx.stroke();
           const octave = Math.floor(midi / 12) - 1;
-          ctx.fillStyle = "rgba(255,255,255,0.35)";
-          ctx.font = "9px 'Noto Sans KR', 'Rajdhani', sans-serif";
-          ctx.fillText(`${NOTE_NAMES[noteIdx]}${octave}`, LABEL_AREA_WIDTH - 6, y);
+          ctx.lineWidth = 0.8;
+          ctx.strokeStyle = "rgba(255,255,255,0.09)";
+          ctx.stroke();
+          ctx.fillStyle = "rgba(255,255,255,0.45)";
+          ctx.font = "500 10px 'DM Sans', 'Noto Sans KR', sans-serif";
+          ctx.fillText(`${NOTE_NAMES[noteIdx]}${octave}`, LABEL_AREA_WIDTH - 8, y);
         } else {
           ctx.lineWidth = 0.5;
-          ctx.strokeStyle = "rgba(255,255,255,0.03)";
-          ctx.setLineDash([2, 4]);
+          ctx.strokeStyle = "rgba(255,255,255,0.04)";
           ctx.stroke();
-          ctx.setLineDash([]);
         }
       }
 
-      const pulse = 0.7 + 0.3 * Math.sin(now * 6);
-      ctx.save();
-      ctx.shadowColor = "rgba(0, 229, 255, 0.9)";
-      ctx.shadowBlur = 18 + pulse * 6;
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+      const hitGradient = ctx.createLinearGradient(hitLineX, contentTop, hitLineX, contentBottom);
+      hitGradient.addColorStop(0, "rgba(78,205,196,0)");
+      hitGradient.addColorStop(0.5, "rgba(78,205,196,0.9)");
+      hitGradient.addColorStop(1, "rgba(78,205,196,0)");
+      ctx.strokeStyle = hitGradient;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(hitLineX, contentTop);
       ctx.lineTo(hitLineX, contentBottom);
       ctx.stroke();
-      ctx.restore();
 
       const drawPill = (x: number, y: number, widthValue: number, heightValue: number) => {
         const r = heightValue / 2;
@@ -642,116 +743,82 @@ export default function PerfectScoreGame() {
         ctx.closePath();
       };
 
-       words.forEach((word, index) => {
-         if (typeof word.midi !== "number") return;
-         if (word.endTime < startTime || word.startTime > endTime) return;
+      words.forEach((word) => {
+        if (typeof word.midi !== "number") return;
+        if (word.endTime < startTime || word.startTime > endTime) return;
 
-         const xStartRaw = hitLineX + (word.startTime - now) * pixelsPerSecond;
-         const xEndRaw = hitLineX + (word.endTime - now) * pixelsPerSecond;
-         const xStart = xStartRaw + 1.5;
-         const xEnd = xEndRaw - 1.5;
-         const barWidth = Math.max(8, xEnd - xStart);
+        const xStartRaw = hitLineX + (word.startTime - now) * pixelsPerSecond;
+        const xEndRaw = hitLineX + (word.endTime - now) * pixelsPerSecond;
+        const xStart = xStartRaw + 1.5;
+        const xEnd = xEndRaw - 1.5;
+        const barWidth = Math.max(8, xEnd - xStart);
         const yCenter = midiToY(word.midi);
-        const barHeight = 12;
+        const barHeight = 14;
         const yTop = yCenter - barHeight / 2;
 
         const key = `${word.lineIndex}-${word.wordIndex}`;
         const result = scoredResultsRef.current.get(key)?.result;
-
         const isPast = word.endTime < now;
         const isActive = now >= word.startTime && now <= word.endTime;
 
-        const createGlassGradient = (top: string, mid: string, bottom: string) => {
+        const createGradient = (top: string, bottom: string) => {
           const g = ctx.createLinearGradient(0, yTop, 0, yTop + barHeight);
           g.addColorStop(0, top);
-          g.addColorStop(0.5, mid);
           g.addColorStop(1, bottom);
           return g;
         };
 
-        let fillStyle: string | CanvasGradient = "#333";
-        let glowColor = "rgba(0,0,0,0)";
+        let fillStyle: string | CanvasGradient = createGradient("rgba(177,191,220,0.35)", "rgba(150,165,200,0.35)");
+        let strokeStyle = "rgba(255,255,255,0.16)";
+        let glow = "rgba(0,0,0,0)";
 
         if (result) {
           if (result === "PERFECT" || result === "GREAT") {
-            fillStyle = createGlassGradient("#CC9A00", "#FFD700", "#FFA000");
-            glowColor = "rgba(255, 215, 0, 0.7)";
+            fillStyle = createGradient("rgba(21,180,134,0.95)", "rgba(16,143,109,0.95)");
+            strokeStyle = "rgba(188,255,233,0.8)";
+            glow = "rgba(16,185,129,0.7)";
           } else if (result === "GOOD") {
-            fillStyle = createGlassGradient("#2F6EDB", "#60A5FA", "#3070CC");
+            fillStyle = createGradient("rgba(111,191,255,0.95)", "rgba(76,145,226,0.9)");
+            strokeStyle = "rgba(194,228,255,0.85)";
           } else {
-            fillStyle = createGlassGradient("#2B2B2B", "#444444", "#2B2B2B");
+            fillStyle = createGradient("rgba(90,94,114,0.75)", "rgba(61,64,82,0.75)");
+            strokeStyle = "rgba(164,171,201,0.35)";
           }
         } else if (isPast) {
-          fillStyle = createGlassGradient("#2B2B2B", "#444444", "#2B2B2B");
+          fillStyle = createGradient("rgba(78,83,104,0.65)", "rgba(58,61,79,0.65)");
+          strokeStyle = "rgba(150,158,191,0.28)";
         } else if (isActive) {
-          fillStyle = createGlassGradient("#00B7D6", "#FFFFFF", "#00E5FF");
-          glowColor = "rgba(0, 229, 255, 0.9)";
-        } else {
-          fillStyle = createGlassGradient("#3A7CB5", "#FFFFFF", "#80D0FF");
+          fillStyle = createGradient("rgba(240,192,64,0.95)", "rgba(212,158,37,0.95)");
+          strokeStyle = "rgba(255,241,199,0.85)";
+          glow = "rgba(240,192,64,0.8)";
         }
 
         ctx.save();
-        if (glowColor !== "rgba(0,0,0,0)") {
-          ctx.shadowColor = glowColor;
-          ctx.shadowBlur = isActive ? 16 : 10;
+        if (glow !== "rgba(0,0,0,0)") {
+          const pulse = 0.6 + 0.4 * Math.sin(now * 8);
+          ctx.shadowColor = glow;
+          ctx.shadowBlur = 10 + pulse * 8;
         }
         ctx.fillStyle = fillStyle;
         drawPill(xStart, yTop, barWidth, barHeight);
         ctx.fill();
-        ctx.strokeStyle = "rgba(255,255,255,0.3)";
-        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = strokeStyle;
+        ctx.lineWidth = 1;
         ctx.stroke();
         ctx.restore();
-
-        const wordDuration = word.endTime - word.startTime;
-        const hasVibrato = wordDuration > 0.8;
-        const prevWord = words[index - 1];
-        const interval = typeof prevWord?.midi === "number" ? word.midi - prevWord.midi : 0;
-        const hasRise = interval >= 3;
-        const hasFall = interval <= -3;
-        const techniqueIcons: { label: string; color: string }[] = [];
-
-        if (hasVibrato) {
-          techniqueIcons.push({ label: "V", color: "#FF69B4" });
-        }
-        if (hasRise) {
-          techniqueIcons.push({ label: "↑", color: "#00FF88" });
-        } else if (hasFall) {
-          techniqueIcons.push({ label: "↓", color: "#FF8800" });
-        }
-
-        if (techniqueIcons.length > 0) {
-          const iconRadius = 8;
-          const iconSpacing = 4;
-          const baseX = xStart + barWidth - iconRadius - 2;
-          const baseY = yCenter;
-
-          ctx.save();
-          ctx.font = "bold 10px 'Noto Sans KR', 'Rajdhani', sans-serif";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-
-          techniqueIcons.forEach((icon, iconIndex) => {
-            const iconX = baseX - iconIndex * (iconRadius * 2 + iconSpacing);
-            ctx.fillStyle = icon.color;
-            ctx.beginPath();
-            ctx.arc(iconX, baseY, iconRadius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "rgba(0,0,0,0.85)";
-            ctx.fillText(icon.label, iconX, baseY + 0.5);
-          });
-
-          ctx.restore();
-        }
       });
 
       const trail = userPitchTrailRef.current;
       if (trail.length > 0) {
+        const currentTargetWord = words.find(
+          (word) => typeof word.midi === "number" && now >= word.startTime && now <= word.endTime
+        );
+
         ctx.save();
-        ctx.strokeStyle = "#00E5FF";
-        ctx.lineWidth = 3;
-        ctx.shadowColor = "rgba(0, 229, 255, 0.6)";
-        ctx.shadowBlur = 12;
+        ctx.strokeStyle = "#4ecdc4";
+        ctx.lineWidth = 5;
+        ctx.shadowColor = "rgba(78,205,196,0.9)";
+        ctx.shadowBlur = 18;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.beginPath();
@@ -766,14 +833,14 @@ export default function PerfectScoreGame() {
           if (!started) {
             ctx.moveTo(x, y);
             started = true;
-           } else {
-             const prevPoint = trail[i - 1];
-             if (point.time - prevPoint.time > 0.3 || Math.abs(point.midi - prevPoint.midi) > 12) {
-               ctx.moveTo(x, y);
-             } else {
-               ctx.lineTo(x, y);
-             }
-           }
+          } else {
+            const prevPoint = trail[i - 1];
+            if (!prevPoint || point.time - prevPoint.time > 0.3 || Math.abs(point.midi - prevPoint.midi) > 12) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
         }
         ctx.stroke();
 
@@ -782,55 +849,99 @@ export default function PerfectScoreGame() {
           const headX = hitLineX + (lastPoint.time - now) * pixelsPerSecond;
           const headY = midiToY(lastPoint.midi);
           if (headX > 0 && headX < width) {
-            ctx.fillStyle = "#FFFFFF";
-            ctx.shadowColor = "rgba(255,255,255,0.9)";
-            ctx.shadowBlur = 10;
+            const noteLabel = midiToNoteLabel(lastPoint.midi);
+            const targetMidi = typeof currentTargetWord?.midi === "number" ? currentTargetWord.midi : null;
+            const snapped = targetMidi !== null && Math.abs(lastPoint.midi - targetMidi) <= SNAP_MIDI_THRESHOLD;
+
+            setSnapIndicatorActive(snapped);
+            setSnapNoteLabel(snapped && targetMidi !== null ? midiToNoteLabel(targetMidi) : "");
+
+            if (snapped && targetMidi !== null) {
+              const targetY = midiToY(targetMidi);
+              ctx.strokeStyle = "rgba(16,185,129,0.85)";
+              ctx.lineWidth = 2;
+              ctx.setLineDash([6, 4]);
+              ctx.beginPath();
+              ctx.moveTo(headX, headY);
+              ctx.lineTo(hitLineX, targetY);
+              ctx.stroke();
+              ctx.setLineDash([]);
+
+              ctx.fillStyle = "rgba(16,185,129,0.95)";
+              ctx.shadowColor = "rgba(16,185,129,0.9)";
+              ctx.shadowBlur = 20;
+              ctx.beginPath();
+              ctx.arc(headX, headY, 8, 0, Math.PI * 2);
+              ctx.fill();
+            }
+
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowColor = "rgba(255,255,255,0.95)";
+            ctx.shadowBlur = 14;
             ctx.beginPath();
-            ctx.arc(headX, headY, 4, 0, Math.PI * 2);
+            ctx.arc(headX, headY, 5, 0, Math.PI * 2);
             ctx.fill();
 
-            if (Math.abs(headX - hitLineX) < 10) {
-              ctx.fillStyle = "#00E5FF";
-              ctx.shadowColor = "rgba(0,229,255,0.9)";
-              ctx.shadowBlur = 16;
-              ctx.beginPath();
-              ctx.arc(headX, headY, 6, 0, Math.PI * 2);
-              ctx.fill();
-            }
+            const noteTagWidth = 46;
+            const noteTagHeight = 22;
+            const noteTagX = clamp(headX + 12, 8, width - noteTagWidth - 8);
+            const noteTagY = clamp(headY - 32, 6, height - noteTagHeight - 6);
 
             ctx.shadowBlur = 0;
-            ctx.fillStyle = "rgba(255,255,255,0.7)";
-            for (let i = 0; i < 3; i++) {
-              ctx.beginPath();
-              ctx.arc(headX + 8 + i * 3, headY - 6 - i * 2, 1.5, 0, Math.PI * 2);
-              ctx.fill();
-            }
+            ctx.fillStyle = "rgba(255,255,255,0.14)";
+            ctx.strokeStyle = snapped ? "rgba(16,185,129,0.88)" : "rgba(240,192,64,0.7)";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            const r = 11;
+            ctx.moveTo(noteTagX + r, noteTagY);
+            ctx.lineTo(noteTagX + noteTagWidth - r, noteTagY);
+            ctx.arcTo(noteTagX + noteTagWidth, noteTagY, noteTagX + noteTagWidth, noteTagY + r, r);
+            ctx.lineTo(noteTagX + noteTagWidth, noteTagY + noteTagHeight - r);
+            ctx.arcTo(noteTagX + noteTagWidth, noteTagY + noteTagHeight, noteTagX + noteTagWidth - r, noteTagY + noteTagHeight, r);
+            ctx.lineTo(noteTagX + r, noteTagY + noteTagHeight);
+            ctx.arcTo(noteTagX, noteTagY + noteTagHeight, noteTagX, noteTagY + noteTagHeight - r, r);
+            ctx.lineTo(noteTagX, noteTagY + r);
+            ctx.arcTo(noteTagX, noteTagY, noteTagX + r, noteTagY, r);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = snapped ? "#b6ffdf" : "#f7d06d";
+            ctx.font = "700 12px 'IBM Plex Mono', monospace";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(noteLabel, noteTagX + noteTagWidth / 2, noteTagY + noteTagHeight / 2 + 0.5);
           }
+        } else {
+          setSnapIndicatorActive(false);
+          setSnapNoteLabel("");
         }
 
         ctx.restore();
+      } else {
+        setSnapIndicatorActive(false);
+        setSnapNoteLabel("");
       }
 
       const popupDuration = 0.5;
-      judgementPopupsRef.current = judgementPopupsRef.current.filter(popup => now - popup.time <= popupDuration);
-      judgementPopupsRef.current.forEach(popup => {
+      judgementPopupsRef.current = judgementPopupsRef.current.filter((popup) => now - popup.time <= popupDuration);
+      judgementPopupsRef.current.forEach((popup) => {
         const life = clamp(1 - (now - popup.time) / popupDuration, 0, 1);
         const alpha = life * life;
         ctx.save();
-        ctx.font = "bold 20px 'Noto Sans KR', 'Rajdhani', sans-serif";
+        ctx.font = "700 20px 'DM Sans', 'Noto Sans KR', sans-serif";
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
         ctx.fillStyle = `${popup.color}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
         ctx.shadowColor = popup.color;
         ctx.shadowBlur = 10 * alpha;
         const y = clamp(contentTop + popup.y * (staffHeight / (MIDI_MAX - MIDI_MIN)), contentTop, contentBottom);
-        ctx.fillText(popup.text, hitLineX + 16, y - 8 * (1 - alpha));
+        ctx.fillText(popup.text, hitLineX + 14, y - 8 * (1 - alpha));
         ctx.restore();
       });
     }
 
     rafRef.current = requestAnimationFrame(loop);
-  }, [currentLyricIndex, dispatch, findCurrentLyricIndex, words]);
+  }, [currentLyricIndex, dispatch, findCurrentLyricIndex, roomCode, words]);
 
   useEffect(() => {
     if (!audioLoaded) return;
@@ -865,12 +976,12 @@ export default function PerfectScoreGame() {
     : 0;
   const grade = getGrade(scorePercent);
   const gradeColor = scorePercent >= 85
-    ? "#FFD700"
+    ? "#f0c040"
     : scorePercent >= 80
-    ? "#34D399"
+    ? "#10b981"
     : scorePercent >= 70
-    ? "#60A5FA"
-    : "#EF4444";
+    ? "#4ecdc4"
+    : "#f28b82";
   const pitchScore = totalScored
     ? Math.round(
         (perfectCount * 100 + greatCount * 85 + goodCount * 70 + normalCount * 45 + badCount * 20) /
@@ -898,6 +1009,37 @@ export default function PerfectScoreGame() {
     BAD: badCount,
   };
   const totalForBars = Math.max(1, totalScored);
+
+  const normalizedServerScores = useMemo(() => {
+    return scores.map((entry) => {
+      const item = entry as unknown as FinalScoreLike;
+      return {
+        participantKey: item.participantId !== undefined ? String(item.participantId) : item.odId || "",
+        nickname: item.nickname || item.odName || "Unknown",
+        score: typeof item.totalScore === "number" ? item.totalScore : typeof item.score === "number" ? item.score : 0,
+      };
+    });
+  }, [scores]);
+
+  const orderedTurnResults = useMemo(() => {
+    const serverMap: Record<string, { nickname: string; score: number }> = {};
+    normalizedServerScores.forEach((entry) => {
+      if (!entry.participantKey) return;
+      serverMap[entry.participantKey] = { nickname: entry.nickname, score: entry.score };
+    });
+
+    return turnOrder.map((id) => {
+      const key = String(id);
+      const participant = participants.find((p) => String(p.id) === key);
+      const serverScore = serverMap[key];
+      const localScore = turnScores[key];
+      return {
+        id: key,
+        nickname: participant?.nickname || serverScore?.nickname || "Unknown",
+        score: typeof serverScore?.score === "number" ? serverScore.score : localScore ?? 0,
+      };
+    });
+  }, [normalizedServerScores, participants, turnOrder, turnScores]);
 
   useEffect(() => {
     if (status !== "finished") return;
@@ -936,7 +1078,7 @@ export default function PerfectScoreGame() {
       ctx.stroke();
     }
 
-    ctx.strokeStyle = "rgba(255,255,255,0.2)";
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
     radarValues.forEach((_, index) => {
       const angle = startAngle + index * angleStep;
       const x = centerX + Math.cos(angle) * radius;
@@ -957,13 +1099,13 @@ export default function PerfectScoreGame() {
       else ctx.lineTo(x, y);
     });
     ctx.closePath();
-    ctx.fillStyle = "rgba(0, 229, 255, 0.3)";
-    ctx.strokeStyle = "rgba(0, 229, 255, 0.85)";
+    ctx.fillStyle = "rgba(78,205,196,0.28)";
+    ctx.strokeStyle = "rgba(78,205,196,0.95)";
     ctx.lineWidth = 2;
     ctx.fill();
     ctx.stroke();
 
-    ctx.font = "11px 'Noto Sans KR', 'Rajdhani', sans-serif";
+    ctx.font = "11px 'DM Sans', 'Noto Sans KR', sans-serif";
     ctx.fillStyle = "rgba(255,255,255,0.75)";
     RADAR_LABELS.forEach((label, index) => {
       const angle = startAngle + index * angleStep;
@@ -974,360 +1116,360 @@ export default function PerfectScoreGame() {
       ctx.textBaseline = Math.abs(Math.sin(angle)) < 0.2 ? "middle" : Math.sin(angle) > 0 ? "top" : "bottom";
       ctx.fillText(label, x, y);
     });
-  }, [expressionScore, pitchScore, rhythmScore, status, vibratoScore, stabilityScore]);
+  }, [expressionScore, pitchScore, radarValues, rhythmScore, stabilityScore, status, vibratoScore]);
 
   if (!currentSong) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-gradient-to-b from-[#0E041A] via-[#050814] to-black text-white">
-        <AlertCircle className="w-16 h-16 text-white/40 mb-4" />
-        <p className="text-white/60">노래 정보를 불러오는 중...</p>
+      <div className="flex h-full flex-col items-center justify-center bg-gradient-to-br from-[#0a0a1a] via-[#131a2b] to-[#1a1a2e] text-white">
+        <AlertCircle className="mb-4 h-14 w-14 text-white/45" />
+        <p className="text-white/65" style={{ fontFamily: "'DM Sans', 'Noto Sans KR', sans-serif" }}>노래 정보를 불러오는 중...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-gradient-to-b from-[#0E041A] via-[#050814] to-black text-white overflow-hidden">
-      {audioUrl && (
-        <audio
-          ref={audioRef}
-          src={audioUrl}
-          crossOrigin="anonymous"
-        />
-      )}
+    <div
+      className="relative flex h-full w-full overflow-hidden text-white"
+      style={{
+        fontFamily: "'DM Sans', 'Noto Sans KR', sans-serif",
+        background: "linear-gradient(150deg, #0a0a1a 0%, #121b2f 56%, #1a1a2e 100%)",
+      }}
+    >
+      {audioUrl && <audio ref={audioRef} src={audioUrl} crossOrigin="anonymous" />}
 
-      <div className="shrink-0 pl-16 pr-56 pt-4 pb-2 z-20">
-        <div className="flex items-start justify-between gap-4 select-none">
-          <div className="flex flex-col items-start">
-            <p className="text-sm text-[#BD00FF] tracking-[0.25em] font-black italic drop-shadow-[0_0_10px_rgba(189,0,255,0.6)]">
-              PERFECT SCORE
-            </p>
-            <div className="relative mt-[-6px]">
-              <div
-                className="text-4xl sm:text-5xl font-black text-white tabular-nums tracking-tight"
-                style={{ textShadow: "0 0 18px rgba(0, 229, 255, 0.45)" }}
-              >
-                {score.toFixed(2)}
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="w-[200px] h-4 rounded-full overflow-hidden bg-white/10 border border-white/15 flex">
-                {JUDGMENT_SEGMENTS.map(segment => {
-                  const isActive = lastJudgmentRef.current === segment.key;
-                  return (
-                    <div
-                      key={segment.key}
-                      className="flex-1 transition-opacity duration-200"
-                      style={{ backgroundColor: segment.color, opacity: isActive ? 1 : 0.3 }}
-                    />
-                  );
-                })}
-              </div>
-              <div className="mt-1 flex justify-between text-[9px] uppercase tracking-[0.18em] text-white/50">
-                {JUDGMENT_SEGMENTS.map(segment => (
-                  <span key={segment.key}>{segment.label}</span>
-                ))}
-              </div>
-            </div>
-          </div>
+      <div className="absolute inset-0 opacity-[0.15] pointer-events-none" style={{ backgroundImage: "radial-gradient(circle at 20% 20%, rgba(240,192,64,0.35), transparent 35%), radial-gradient(circle at 80% 0%, rgba(78,205,196,0.25), transparent 30%)" }} />
 
-          <div className="hidden sm:flex flex-col items-center text-center pt-2">
-            <h1 className="text-lg font-bold truncate max-w-[320px] text-white/90">
-              {currentSong.title}
-            </h1>
-            <p className="text-xs text-white/60">{currentSong.artist}</p>
-          </div>
-
-          <div className="flex flex-col items-end">
-            <div
-              className="text-4xl sm:text-5xl font-black text-[#FFA500] tabular-nums tracking-tighter"
-              style={{ textShadow: "0 0 18px rgba(255, 165, 0, 0.5)" }}
-            >
-              {combo}
-            </div>
-            <div className="text-sm text-[#FFA500] font-bold tracking-[0.4em] mt-[-4px]">
-              COMBO
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="mt-4 h-2 w-full bg-white/10 rounded-full overflow-hidden cursor-pointer relative group"
-          onClick={handleSeek}
-        >
-          <motion.div
-            className="h-full bg-gradient-to-r from-[#FFD700] via-[#A020F0] to-[#00E5FF]"
-            style={{ width: `${progress}%` }}
-          />
-          <div className="absolute top-0 bottom-0 w-full opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="h-full bg-white/10 w-full" />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 min-h-0 relative w-full z-10 my-2 px-2 sm:px-6">
-        <div ref={containerRef} className="relative w-full h-full">
-          <canvas ref={canvasRef} className="w-full h-full rounded-2xl border border-white/10 bg-black/40" />
-        </div>
-
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
-          <AnimatePresence>
-            {scorePopups.map(popup => (
-              <motion.div
-                key={popup.id}
-                initial={{ opacity: 1, y: 0, scale: 1 }}
-                animate={{ opacity: 0, y: -60, scale: 1.4 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.8 }}
-                className={`text-4xl font-black drop-shadow-[0_6px_20px_rgba(0,0,0,0.6)] ${
-                  popup.type === "PERFECT"
-                    ? "text-[#FFD700]"
-                    : popup.type === "GREAT"
-                    ? "text-green-400"
-                    : popup.type === "GOOD"
-                    ? "text-blue-400"
-                    : "text-gray-400"
-                }`}
-              >
-                {popup.type}
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-      </div>
-
-      <div className="shrink-0 px-4 py-2 z-20 min-h-[110px] flex flex-col justify-center">
-        <div className="flex flex-col gap-2 items-center text-center">
-          <div className="flex flex-wrap justify-center gap-x-[0.35em] text-2xl sm:text-3xl md:text-4xl font-black">
-            {currentLine ? (
-              currentLine.words && currentLine.words.length > 0 ? (
-                currentLine.words.map((word, idx) => {
-                  const durationValue = word.endTime - word.startTime;
-                  const progressValue = durationValue > 0
-                    ? clamp((localTime - word.startTime) / durationValue, 0, 1)
-                    : (localTime >= word.endTime ? 1 : 0);
-                  return (
-                    <span key={idx} className="relative inline-block">
-                      <span
-                        className="text-white/30"
-                        style={{
-                          WebkitTextStroke: "2px rgba(0,0,0,0.85)",
-                          paintOrder: "stroke fill",
-                        }}
-                      >
-                        {word.text}
-                      </span>
-                       <span
-                         className="absolute left-0 top-0 text-[#FFD700] whitespace-nowrap"
-                        style={{
-                          clipPath: `inset(-0.25em ${100 - progressValue * 100}% -0.25em 0)`,
-                          WebkitTextStroke: "2px rgba(0,0,0,0.95)",
-                          paintOrder: "stroke fill",
-                          textShadow: "0 0 14px rgba(255, 215, 0, 0.65)",
-                        }}
-                      >
-                        {word.text}
-                      </span>
-                    </span>
-                  );
-                })
-              ) : (
-                <span className="text-white" style={{ WebkitTextStroke: "2px rgba(0,0,0,0.9)" }}>
-                  {currentLine.text}
-                </span>
-              )
-            ) : (
-              <span>&nbsp;</span>
-            )}
-          </div>
-
-          <div
-            className="text-lg sm:text-2xl font-bold text-white/50 mt-1"
-            style={{ WebkitTextStroke: "1px rgba(0,0,0,0.8)", paintOrder: "stroke fill" }}
-          >
-            {nextLine?.text || "\u00A0"}
-          </div>
-        </div>
-      </div>
-
-      <div className="shrink-0 px-4 py-3 sm:px-6 sm:py-4 bg-gradient-to-t from-black via-black/80 to-transparent z-30">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex justify-between text-xs text-white/60 font-mono mb-2 px-1">
-            <span>{formatTime(localTime)}</span>
-            <span>{formatTime(duration)}</span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+      <div className="relative z-10 flex h-full w-full flex-col px-3 pb-4 pt-3 sm:px-5 sm:pt-4">
+        <div className="mb-3 rounded-2xl border border-white/15 bg-white/[0.05] px-4 py-3 backdrop-blur-xl sm:px-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.35em] text-white/55">Now Singing</p>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setVolume(v => v === 0 ? 1 : 0)}
-                  className="p-1 hover:text-white text-white/60 transition-colors"
-                >
-                  <Volume2 className="w-5 h-5" />
-                </button>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={volume}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    setVolume(v);
-                    if (audioRef.current) audioRef.current.volume = v;
-                  }}
-                  className="w-20 sm:w-24 accent-[#FFD700] hidden sm:block"
-                />
+                <span className="text-lg font-semibold text-white sm:text-xl">{currentSingerNickname || "대기 중"}</span>
+                {isMyTurn && <span className="rounded-full bg-[#f0c040]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#f0c040]">Your turn!</span>}
+              </div>
+            </div>
+
+            <div className="min-w-0 flex-1 text-center sm:max-w-[46%]">
+              <h1 className="truncate text-base font-semibold text-white sm:text-lg">{currentSong.title}</h1>
+              <p className="truncate text-xs uppercase tracking-[0.26em] text-white/55">{currentSong.artist}</p>
+            </div>
+
+            <div className="flex items-center gap-3 sm:gap-5">
+              <div className="text-right">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-white/55">Score</p>
+                <p className="text-2xl font-bold text-[#f0c040]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{score.toFixed(2)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-white/55">Combo</p>
+                <p className="text-2xl font-bold text-[#4ecdc4]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{combo}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 h-1.5 w-full cursor-pointer overflow-hidden rounded-full bg-white/10" onClick={handleSeek}>
+            <motion.div
+              className="h-full"
+              style={{ width: `${progress}%`, background: "linear-gradient(90deg, #4ecdc4 0%, #f0c040 100%)" }}
+            />
+          </div>
+        </div>
+
+        <div className="relative flex min-h-0 flex-1 gap-3">
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <div className="relative min-h-0 flex-1 overflow-hidden rounded-3xl border border-white/15 bg-white/[0.03] backdrop-blur-lg">
+              <div ref={containerRef} className="h-full w-full">
+                <canvas ref={canvasRef} className="h-full w-full" />
               </div>
 
+              {!isMyTurn && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0a0a1a]/55 backdrop-blur-sm">
+                  <div className="rounded-2xl border border-white/20 bg-white/[0.08] px-6 py-4 text-center shadow-2xl">
+                    <p className="text-xs uppercase tracking-[0.3em] text-white/60">Turn Locked</p>
+                    <p className="mt-1 text-lg font-semibold text-white">Waiting for {currentSingerNickname || "next singer"} to sing...</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2">
+                <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ${isMyTurn ? "bg-[#10b981]/25 text-[#b8ffe0]" : "bg-white/10 text-white/70"}`}>
+                  {isMyTurn ? "Your turn" : "Spectating"}
+                </span>
+                {snapIndicatorActive && (
+                  <span className="rounded-full bg-[#10b981]/25 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#b8ffe0]">
+                    Snap {snapNoteLabel}
+                  </span>
+                )}
+              </div>
+
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+                <AnimatePresence>
+                  {scorePopups.map((popup) => (
+                    <motion.div
+                      key={popup.id}
+                      initial={{ opacity: 1, y: 0, scale: 1 }}
+                      animate={{ opacity: 0, y: -56, scale: 1.25 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.72 }}
+                      className="text-4xl font-bold"
+                      style={{ color: popup.type === "PERFECT" ? "#10b981" : popup.type === "GREAT" ? "#4ecdc4" : popup.type === "GOOD" ? "#93c5fd" : "#f28b82" }}
+                    >
+                      {popup.type}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-4 text-center backdrop-blur-xl sm:px-6">
+              <div className="flex min-h-[56px] flex-wrap justify-center gap-x-[0.32em] text-3xl font-extrabold sm:text-4xl">
+                {currentLine ? (
+                  currentLine.words && currentLine.words.length > 0 ? (
+                    currentLine.words.map((word, idx) => {
+                      const durationValue = word.endTime - word.startTime;
+                      const progressValue = durationValue > 0
+                        ? clamp((localTime - word.startTime) / durationValue, 0, 1)
+                        : localTime >= word.endTime
+                        ? 1
+                        : 0;
+                      return (
+                        <span key={idx} className="relative inline-block">
+                          <span className="text-white/35">{word.text}</span>
+                          <span
+                            className="absolute left-0 top-0 whitespace-nowrap text-[#f0c040]"
+                            style={{
+                              clipPath: `inset(-0.25em ${100 - progressValue * 100}% -0.25em 0)`,
+                              textShadow: "0 0 14px rgba(240,192,64,0.62)",
+                            }}
+                          >
+                            {word.text}
+                          </span>
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <span>{currentLine.text}</span>
+                  )
+                ) : (
+                  <span>&nbsp;</span>
+                )}
+              </div>
+
+              <p className="mt-2 min-h-[24px] text-lg font-semibold text-white/50 sm:text-xl">{nextLine?.text || "\u00A0"}</p>
+            </div>
+          </div>
+
+          <aside className={`${isSidebarCollapsed ? "w-12" : "w-[250px]"} hidden h-full shrink-0 flex-col rounded-2xl border border-white/15 bg-white/[0.05] p-3 backdrop-blur-xl transition-all duration-300 lg:flex`}>
+            <button
+              className="mb-3 flex h-8 w-8 items-center justify-center self-end rounded-full border border-white/20 bg-white/10 text-white/75 hover:bg-white/20"
+              onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+            >
+              {isSidebarCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+
+            {!isSidebarCollapsed && (
+              <>
+                <p className="mb-2 text-[11px] uppercase tracking-[0.3em] text-white/55">Turn Order</p>
+                <div className="space-y-2">
+                  {participants.map((participant, index) => {
+                    const isActive = String(participant.id) === String(currentSingerId);
+                    const scoreValue = turnScores[String(participant.id)] ?? 0;
+                    return (
+                      <div key={String(participant.id)} className={`rounded-xl border px-3 py-2 ${isActive ? "border-[#f0c040]/55 bg-[#f0c040]/10" : "border-white/10 bg-white/[0.03]"}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-white/65">{index + 1}</span>
+                          <span className="text-sm font-medium text-white">{participant.nickname}</span>
+                        </div>
+                        <div className="mt-1 text-right text-xs text-white/55" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                          {scoreValue.toFixed(0)} pts
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </aside>
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center px-3 sm:px-6">
+          <div className="pointer-events-auto flex w-full max-w-4xl items-center justify-between gap-2 rounded-2xl border border-white/20 bg-white/[0.08] px-3 py-2 backdrop-blur-2xl sm:px-4 sm:py-3">
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setIsMicOn(!isMicOn)}
-                className={`px-3 py-2 rounded-full transition-all flex items-center gap-2 ${
-                  isMicOn ? "bg-[#FFD700]/20 text-[#FFD700]" : "bg-white/10 text-white/60"
-                }`}
+                onClick={() => setVolume((v) => (v === 0 ? 1 : 0))}
+                className="rounded-full border border-white/20 bg-white/10 p-2 text-white/80 hover:bg-white/20"
               >
-                {isMicOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                <span className="text-xs font-bold tracking-[0.3em]">MIC</span>
+                <Volume2 className="h-4 w-4" />
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={volume}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setVolume(v);
+                  if (audioRef.current) audioRef.current.volume = v;
+                }}
+                className="w-16 accent-[#f0c040] sm:w-24"
+              />
+              <button
+                onClick={() => setIsMicOn((prev) => !prev)}
+                disabled={!isMyTurn}
+                className={`rounded-full border p-2 ${isMyTurn ? "border-[#4ecdc4]/60 bg-[#4ecdc4]/12 text-[#9efff8]" : "border-white/20 bg-white/10 text-white/40"}`}
+              >
+                {isMicOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
               </button>
             </div>
 
-            <div className="flex items-center gap-4 sm:gap-6">
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={handleRestart}
-                className="p-2 text-white/70 hover:text-white transition-colors"
+                className="rounded-full border border-white/20 bg-white/10 p-2 text-white/80 hover:bg-white/20"
               >
-                <RotateCcw className="w-5 h-5" />
+                <RotateCcw className="h-4 w-4" />
               </button>
               <button
                 onClick={togglePlay}
                 disabled={!audioLoaded}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#FFD700] text-black flex items-center justify-center shadow-xl disabled:opacity-50 hover:scale-105 transition-transform"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f0c040] text-[#101018] shadow-lg shadow-[#f0c040]/35 disabled:opacity-50"
               >
-                {isPlaying ? <Pause className="w-5 h-5 sm:w-6 sm:h-6" /> : <Play className="w-5 h-5 sm:w-6 sm:h-6 ml-1" />}
+                {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="ml-0.5 h-5 w-5" />}
               </button>
               <button
                 onClick={() => window.dispatchEvent(new Event("kero:skipForward"))}
-                className="p-2 text-white/70 hover:text-white transition-colors"
+                className="rounded-full border border-white/20 bg-white/10 p-2 text-white/80 hover:bg-white/20"
               >
-                <SkipForward className="w-5 h-5" />
+                <SkipForward className="h-4 w-4" />
+              </button>
+              <button
+                onClick={passTurn}
+                disabled={!isMyTurn}
+                className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.24em] ${isMyTurn ? "bg-[#f0c040] text-[#101018]" : "bg-white/10 text-white/45"}`}
+              >
+                패스
               </button>
             </div>
 
-            <div className="text-xs text-white/50 font-mono hidden sm:block w-20 text-right">
-              {songQueue.length}곡 대기
+            <div className="hidden min-w-[84px] text-right text-[11px] uppercase tracking-[0.23em] text-white/55 sm:block">
+              {songQueue.length} queue
             </div>
-            <div className="w-8 sm:hidden"></div>
           </div>
         </div>
       </div>
 
       <AnimatePresence>
-        {status === "finished" && score > 0 && (
+        {status === "finished" && score >= 0 && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.94 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-8"
+            className="absolute inset-0 z-50 flex items-center justify-center bg-[#090b16]/70 px-4 py-6 backdrop-blur-xl"
           >
-            <div className="relative w-full max-w-5xl rounded-[32px] border border-white/15 bg-white/10 p-6 sm:p-8 shadow-2xl backdrop-blur-2xl">
-              <div className="absolute top-0 left-0 right-0 h-1 rounded-t-[32px] bg-gradient-to-r from-[#00E5FF] via-[#FFD700] to-[#BD00FF]" />
+            <motion.div
+              initial={{ y: 16, scale: 0.97 }}
+              animate={{ y: 0, scale: 1 }}
+              className="relative w-full max-w-6xl overflow-hidden rounded-[34px] border border-white/20 bg-white/[0.09] p-6 shadow-2xl sm:p-8"
+            >
+              <div className="pointer-events-none absolute inset-0">
+                <div className="absolute left-[-10%] top-[-24%] h-56 w-56 rounded-full bg-[#f0c040]/30 blur-3xl" />
+                <div className="absolute right-[-8%] top-[-16%] h-56 w-56 rounded-full bg-[#4ecdc4]/26 blur-3xl" />
+              </div>
 
-              <div className="flex flex-col lg:flex-row gap-8">
-                <div className="flex flex-col items-center lg:items-start gap-5">
-                  <div className="flex items-center gap-3">
-                    <p className="text-white/60 tracking-[0.4em] text-xs uppercase">Final Result</p>
-                    <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[10px] font-bold tracking-[0.3em] text-white/70">
-                      {scorePercent}%
-                    </span>
+              <div className="relative grid gap-6 lg:grid-cols-[1.15fr_1fr]">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-white/60">Final Result</p>
+                  <div className="mt-2 flex items-end gap-4">
+                    <motion.p
+                      initial={{ scale: 0.7, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: "spring", stiffness: 220, damping: 16 }}
+                      className="relative text-7xl font-black"
+                      style={{ color: gradeColor, textShadow: "0 0 28px rgba(240,192,64,0.35)" }}
+                    >
+                      {grade}
+                      <span className="absolute -inset-8 -z-10 rounded-full border border-white/20" />
+                    </motion.p>
+                    <p className="text-2xl font-bold text-white/88" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{score.toFixed(2)}</p>
                   </div>
-                  <div className="flex items-end gap-4">
-                    <p className="text-5xl sm:text-6xl font-black text-[#FFD700] tabular-nums">
-                      {score.toFixed(2)}
-                    </p>
-                    <div className="text-xs text-white/50 uppercase tracking-[0.3em] mb-2">Score</div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-3">
+                      <p className="text-[10px] uppercase tracking-[0.26em] text-white/58">Accuracy</p>
+                      <p className="mt-1 text-2xl font-bold text-[#4ecdc4]">{accuracy}%</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-3">
+                      <p className="text-[10px] uppercase tracking-[0.26em] text-white/58">Max Combo</p>
+                      <p className="mt-1 text-2xl font-bold text-[#f0c040]">{statsSnapshot.maxCombo}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-3">
+                      <p className="text-[10px] uppercase tracking-[0.26em] text-white/58">Scored</p>
+                      <p className="mt-1 text-2xl font-bold text-white">{totalScored}/{totalWords}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-3">
+                      <p className="text-[10px] uppercase tracking-[0.26em] text-white/58">Perfect</p>
+                      <p className="mt-1 text-2xl font-bold text-[#10b981]">{perfectCount}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-3">
+                      <p className="text-[10px] uppercase tracking-[0.26em] text-white/58">Great</p>
+                      <p className="mt-1 text-2xl font-bold text-[#4ecdc4]">{greatCount}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-3">
+                      <p className="text-[10px] uppercase tracking-[0.26em] text-white/58">Good</p>
+                      <p className="mt-1 text-2xl font-bold text-[#93c5fd]">{goodCount}</p>
+                    </div>
                   </div>
-                  <div className="relative">
-                    <canvas ref={radarCanvasRef} className="w-[220px] h-[220px]" />
+
+                  <div className="mt-5 rounded-2xl border border-white/15 bg-white/[0.05] p-4">
+                    <p className="mb-3 text-[11px] uppercase tracking-[0.3em] text-white/56">Turn Results</p>
+                    <div className="space-y-2">
+                      {orderedTurnResults.map((entry, index) => (
+                        <div key={entry.id} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                          <span className="text-sm text-white/70">#{index + 1} {entry.nickname}</span>
+                          <span className="text-sm font-semibold text-white" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{entry.score.toFixed(0)}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex-1 flex flex-col gap-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.35em] text-white/50">Grade</p>
-                      <div className="mt-1 px-4 py-2 rounded-2xl bg-white/10 border border-white/15 text-3xl font-black" style={{ color: gradeColor }}>
-                        {grade}
-                      </div>
-                    </div>
-                    <div className="px-4 py-3 rounded-2xl bg-white/10 border border-white/20 text-center">
-                      <p className="text-xs uppercase tracking-[0.3em] text-white/50">Accuracy</p>
-                      <p className="text-2xl font-bold text-[#00E5FF]">{accuracy}%</p>
+                <div className="flex flex-col gap-5">
+                  <div className="rounded-2xl border border-white/15 bg-white/[0.05] p-4">
+                    <p className="mb-3 text-[11px] uppercase tracking-[0.3em] text-white/56">Performance Radar</p>
+                    <div className="flex justify-center">
+                      <canvas ref={radarCanvasRef} className="h-[230px] w-[230px]" />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <p className="text-xs text-white/50 uppercase tracking-[0.2em]">Max Combo</p>
-                      <p className="text-lg font-bold text-[#FFA500]">{statsSnapshot.maxCombo}</p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <p className="text-xs text-white/50 uppercase tracking-[0.2em]">Scored</p>
-                      <p className="text-lg font-bold text-white">
-                        {totalScored}/{totalWords}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <p className="text-xs text-white/50 uppercase tracking-[0.2em]">Vibrato</p>
-                      <p className="text-lg font-bold text-pink-300">{statsSnapshot.vibratoCount}</p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <p className="text-xs text-white/50 uppercase tracking-[0.2em]">Perfect</p>
-                      <p className="text-lg font-bold text-[#FFD700]">{perfectCount}</p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <p className="text-xs text-white/50 uppercase tracking-[0.2em]">Great</p>
-                      <p className="text-lg font-bold text-[#34D399]">{greatCount}</p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                      <p className="text-xs text-white/50 uppercase tracking-[0.2em]">Good</p>
-                      <p className="text-lg font-bold text-[#60A5FA]">{goodCount}</p>
+                  <div className="rounded-2xl border border-white/15 bg-white/[0.05] p-4">
+                    <p className="mb-3 text-[11px] uppercase tracking-[0.3em] text-white/56">Judgment Spread</p>
+                    <div className="space-y-2.5">
+                      {JUDGMENT_SEGMENTS.map((segment) => {
+                        const count = segmentCounts[segment.key];
+                        const percent = totalScored ? (count / totalForBars) * 100 : 0;
+                        return (
+                          <div key={segment.key} className="flex items-center gap-3">
+                            <div className="w-16 text-[11px] uppercase tracking-[0.18em] text-white/60">{segment.label}</div>
+                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+                              <div className="h-full" style={{ width: `${percent}%`, backgroundColor: segment.color }} />
+                            </div>
+                            <div className="w-8 text-right text-xs text-white/65">{count}</div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
+
+                  <button
+                    onClick={() => window.dispatchEvent(new Event("kero:skipForward"))}
+                    className="rounded-full bg-[#f0c040] px-6 py-2.5 text-sm font-bold uppercase tracking-[0.26em] text-[#111319]"
+                  >
+                    Next Song
+                  </button>
                 </div>
               </div>
-
-              <div className="mt-6 grid gap-3">
-                {JUDGMENT_SEGMENTS.map(segment => {
-                  const count = segmentCounts[segment.key];
-                  const percent = totalScored ? (count / totalForBars) * 100 : 0;
-                  return (
-                    <div key={segment.key} className="flex items-center gap-3">
-                      <div className="w-16 text-xs uppercase tracking-[0.2em] text-white/60">
-                        {segment.label}
-                      </div>
-                      <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden">
-                        <div
-                          className="h-full"
-                          style={{ width: `${percent}%`, backgroundColor: segment.color }}
-                        />
-                      </div>
-                      <div className="w-10 text-right text-xs text-white/50 tabular-nums">
-                        {count}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-8 flex items-center justify-center">
-                <button
-                  onClick={() => window.dispatchEvent(new Event("kero:skipForward"))}
-                  className="px-6 py-2 rounded-full bg-white/15 hover:bg-white/25 text-white/90 transition-colors"
-                >
-                  Next Song
-                </button>
-              </div>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

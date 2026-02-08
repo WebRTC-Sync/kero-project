@@ -279,16 +279,14 @@ export class YouTubeService {
   }
 
   async getAudioStreamUrl(videoId: string): Promise<string | null> {
-    const cookiesArgs = await this.getCookiesArgs();
     const promise = new Promise<string | null>((resolve) => {
       const args = [
-        ...cookiesArgs,
+        "--no-mark-watched",
         `https://www.youtube.com/watch?v=${videoId}`,
-        "-f", "bestaudio/best",
+        "-f", "251/140/bestaudio/best",
         "-g",
         "--no-playlist",
         "--no-warnings",
-        "--extractor-args", "youtube:player-client=web,default",
       ];
 
       const proc = spawn("yt-dlp", args);
@@ -317,15 +315,14 @@ export class YouTubeService {
     onError: (err: string) => void,
     abortSignal?: AbortSignal,
   ): Promise<void> {
-    const cookiesArgs = await this.getCookiesArgs();
+    // cookies force tv/safari player clients which lack audio-only formats
     const args = [
-      ...cookiesArgs,
+      "--no-mark-watched",
       `https://www.youtube.com/watch?v=${videoId}`,
-      "-f", "bestaudio/best",
+      "-f", "251/140/bestaudio/best",
       "-o", "-",
       "--no-playlist",
       "--no-warnings",
-      "--extractor-args", "youtube:player-client=web,default",
     ];
 
     const proc = spawn("yt-dlp", args);

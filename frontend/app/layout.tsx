@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Archivo_Black, Black_Han_Sans } from "next/font/google";
 import PresenceProvider from "@/components/PresenceProvider";
 import { ReduxProvider } from "@/store/provider";
@@ -35,11 +36,13 @@ export default function RootLayout({
   return (
     <html lang="ko" className={`${archivoBlack.variable} ${blackHanSans.variable}`}>
       <body className="antialiased">
-        <PresenceProvider>
-          <RemoteCursors />
-          <RadialMenu />
-          <ReduxProvider>{children}</ReduxProvider>
-        </PresenceProvider>
+        <Suspense>
+          <PresenceProvider>
+            <RemoteCursors />
+            <RadialMenu />
+            <ReduxProvider>{children}</ReduxProvider>
+          </PresenceProvider>
+        </Suspense>
         <Toaster 
           theme="dark" 
           position="top-center"

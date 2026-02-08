@@ -294,11 +294,17 @@ export function initializeSocket(httpServer: HttpServer): Server {
       const participantId = socket.data.participantId;
       
       if (roomCode && participantId) {
+        const numericParticipantId = typeof participantId === "number" ? participantId : Number(participantId);
+        if (Number.isFinite(numericParticipantId)) {
+          await perfectScoreHandler.handleParticipantLeave(roomCode, numericParticipantId);
+        }
+
         const result = await roomService.leaveRoom(roomCode, participantId);
         socket.leave(roomCode);
 
         if (result.roomClosed) {
           clearRoomRuntimeState(roomCode);
+          perfectScoreHandler.clearRoomTurnState(roomCode);
           io.to(roomCode).emit("room:closed", { reason: "호스트가 방을 나갔습니다." });
           const socketsInRoom = await io.in(roomCode).fetchSockets();
           for (const s of socketsInRoom) {
@@ -379,6 +385,7 @@ export function initializeSocket(httpServer: HttpServer): Server {
       const roomCode = socket.data.roomCode;
       if (!roomCode) return;
       clearRoomRuntimeState(roomCode);
+      perfectScoreHandler.clearRoomTurnState(roomCode);
       io.to(roomCode).emit("game:finished");
     });
 
@@ -460,10 +467,16 @@ export function initializeSocket(httpServer: HttpServer): Server {
       socket.on("disconnect", async () => {
         const { roomCode, participantId } = socket.data;
         if (roomCode && participantId) {
+          const numericParticipantId = typeof participantId === "number" ? participantId : Number(participantId);
+          if (Number.isFinite(numericParticipantId)) {
+            await perfectScoreHandler.handleParticipantLeave(roomCode, numericParticipantId);
+          }
+
           const result = await roomService.leaveRoom(roomCode, participantId);
 
           if (result.roomClosed) {
             clearRoomRuntimeState(roomCode);
+            perfectScoreHandler.clearRoomTurnState(roomCode);
             io.to(roomCode).emit("room:closed", { reason: "호스트가 연결이 끊어졌습니다." });
             const socketsInRoom = await io.in(roomCode).fetchSockets();
             for (const s of socketsInRoom) {
