@@ -100,25 +100,103 @@ class JapaneseService {
     let result = "";
     let i = 0;
     while (i < katakana.length) {
+      let mapped: string;
       if (i + 1 < katakana.length) {
         const twoChar = katakana.substring(i, i + 2);
         if (KATAKANA_HANGUL[twoChar] !== undefined) {
-          result += KATAKANA_HANGUL[twoChar];
+          mapped = KATAKANA_HANGUL[twoChar];
           i += 2;
-          continue;
+        } else {
+          const oneChar = katakana[i];
+          if (KATAKANA_HANGUL[oneChar] !== undefined) {
+            mapped = KATAKANA_HANGUL[oneChar];
+          } else if (oneChar === " " || oneChar === "　") {
+            mapped = " ";
+          } else {
+            mapped = oneChar;
+          }
+          i++;
+        }
+      } else {
+        const oneChar = katakana[i];
+        if (KATAKANA_HANGUL[oneChar] !== undefined) {
+          mapped = KATAKANA_HANGUL[oneChar];
+        } else if (oneChar === " " || oneChar === "　") {
+          mapped = " ";
+        } else {
+          mapped = oneChar;
+        }
+        i++;
+      }
+
+      if (mapped === "ㄴ" || mapped === "ㅅ") {
+        const batchimIndex = mapped === "ㄴ" ? 4 : 19;
+        if (result.length > 0) {
+          const lastChar = result.charCodeAt(result.length - 1);
+          if (lastChar >= 0xac00 && lastChar <= 0xd7a3) {
+            const offset = lastChar - 0xac00;
+            const jongseong = offset % 28;
+            if (jongseong === 0) {
+              const newCode = lastChar + batchimIndex;
+              result = result.slice(0, -1) + String.fromCharCode(newCode);
+              continue;
+            }
+          }
         }
       }
-      const oneChar = katakana[i];
-      if (KATAKANA_HANGUL[oneChar] !== undefined) {
-        result += KATAKANA_HANGUL[oneChar];
-      } else if (oneChar === " " || oneChar === "　") {
-        result += " ";
-      } else {
-        result += oneChar;
-      }
-      i++;
+
+      result += mapped;
     }
     return result;
+  }
+
+  async getFuriganaData(text: string): Promise<Array<{ original: string; reading: string }>> {
+    const cacheKey = `jpn:furi:${text}`;
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) return JSON.parse(cached) as Array<{ original: string; reading: string }>;
+    } catch (_) { /* ignore cache miss */ }
+
+    await this.initKuroshiro();
+    if (!this.kuroshiro) return [{ original: text, reading: "" }];
+
+    try {
+      const furiganaHtml = await this.kuroshiro.convert(text, { to: "hiragana", mode: "furigana" });
+      const rubyRegex = /<ruby>([^<]+)<rp>\(<\/rp><rt>([^<]+)<\/rt><rp>\)<\/rp><\/ruby>/g;
+      const parsed: Array<{ original: string; reading: string }> = [];
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+
+      while ((match = rubyRegex.exec(furiganaHtml)) !== null) {
+        if (match.index > lastIndex) {
+          const plainText = furiganaHtml.slice(lastIndex, match.index);
+          if (plainText) parsed.push({ original: plainText, reading: "" });
+        }
+
+        parsed.push({ original: match[1], reading: match[2] });
+        lastIndex = rubyRegex.lastIndex;
+      }
+
+      if (lastIndex < furiganaHtml.length) {
+        const plainText = furiganaHtml.slice(lastIndex);
+        if (plainText) parsed.push({ original: plainText, reading: "" });
+      }
+
+      const result = parsed.length > 0 ? parsed : [{ original: text, reading: "" }];
+
+      try {
+        await redis.setex(cacheKey, 86400 * 7, JSON.stringify(result));
+      } catch (_) { /* ignore cache error */ }
+
+      return result;
+    } catch (e) {
+      console.error("[JapaneseService] Furigana conversion error:", e instanceof Error ? e.message : e);
+      return [{ original: text, reading: "" }];
+    }
+  }
+
+  async getFurigana(text: string): Promise<Array<{ original: string; reading: string }>> {
+    return this.getFuriganaData(text);
   }
 
   async toKoreanPronunciation(japaneseText: string): Promise<string> {
@@ -146,21 +224,31 @@ class JapaneseService {
     }
   }
 
-  async convertLyricsLines(lines: Array<{ text: string; words?: Array<{ text: string }> }>): Promise<Array<{ text: string; pronunciation: string; words?: Array<{ text: string; pronunciation: string }> }>> {
+  async convertLyricsLines(lines: Array<{ text: string; words?: Array<{ text: string }> }>): Promise<Array<{ text: string; pronunciation: string; furigana: Array<{ original: string; reading: string }>; words?: Array<{ text: string; pronunciation: string; furigana: Array<{ original: string; reading: string }> }> }>> {
     await this.initKuroshiro();
     return Promise.all(
       lines.map(async (line) => {
-        const pronunciation = await this.toKoreanPronunciation(line.text);
-        let words: Array<{ text: string; pronunciation: string }> | undefined;
+        const [pronunciation, furigana] = await Promise.all([
+          this.toKoreanPronunciation(line.text),
+          this.getFuriganaData(line.text),
+        ]);
+        let words: Array<{ text: string; pronunciation: string; furigana: Array<{ original: string; reading: string }> }> | undefined;
         if (line.words && line.words.length > 0) {
           words = await Promise.all(
-            line.words.map(async (w) => ({
-              text: w.text,
-              pronunciation: await this.toKoreanPronunciation(w.text),
-            }))
+            line.words.map(async (w) => {
+              const [wordPronunciation, wordFurigana] = await Promise.all([
+                this.toKoreanPronunciation(w.text),
+                this.getFuriganaData(w.text),
+              ]);
+              return {
+                text: w.text,
+                pronunciation: wordPronunciation,
+                furigana: wordFurigana,
+              };
+            })
           );
         }
-        return { text: line.text, pronunciation, words };
+        return { text: line.text, pronunciation, furigana, words };
       })
     );
   }

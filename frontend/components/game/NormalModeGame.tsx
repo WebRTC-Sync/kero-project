@@ -66,7 +66,7 @@ export default function NormalModeGame() {
 
   const lyrics: LyricsLine[] = currentSong?.lyrics || [];
 
-  const [pronunciationMap, setPronunciationMap] = useState<Map<number, { text: string; words?: { text: string; pronunciation: string }[] }>>(new Map());
+  const [pronunciationMap, setPronunciationMap] = useState<Map<number, { text: string; words?: { text: string; pronunciation: string; furigana?: string }[]; furigana?: { original: string; reading: string }[] }>>(new Map());
   const pronunciationFetchedRef = useRef<string | null>(null);
 
   const isJapanese = useMemo(() => {
@@ -94,9 +94,14 @@ export default function NormalModeGame() {
         });
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
-          const map = new Map<number, { text: string; words?: { text: string; pronunciation: string }[] }>();
-          data.data.forEach((item: { text: string; pronunciation: string; words?: { text: string; pronunciation: string }[] }, idx: number) => {
-            map.set(idx, { text: item.pronunciation, words: item.words });
+          const map = new Map<number, { text: string; words?: { text: string; pronunciation: string; furigana?: string }[]; furigana?: { original: string; reading: string }[] }>();
+          data.data.forEach((item: { text: string; pronunciation: string; furigana?: { original: string; reading: string }[]; words?: { text: string; pronunciation: string; furigana?: { original: string; reading: string }[] }[] }, idx: number) => {
+            const words = item.words?.map(w => ({
+              text: w.text,
+              pronunciation: w.pronunciation,
+              furigana: w.furigana?.filter(f => f.reading).map(f => f.reading).join('') || undefined,
+            }));
+            map.set(idx, { text: item.pronunciation, words, furigana: item.furigana });
           });
           setPronunciationMap(map);
         }
@@ -547,30 +552,80 @@ export default function NormalModeGame() {
     if (!line) return null;
 
     const isLineWaiting = currentLyricIndex < lineIndex;
+    const pronData = isJapanese ? pronunciationMap.get(lineIndex) : undefined;
+    const hasPron = isJapanese && !!pronData;
+    const furiganaData = pronData?.furigana;
+    const hasFurigana = isJapanese && furiganaData && furiganaData.length > 0;
+
+    const getWordFurigana = (wordText: string): string | null => {
+      if (!furiganaData) return null;
+      const entry = furiganaData.find(f => f.original === wordText && f.reading);
+      return entry?.reading ?? null;
+    };
+
+    const hasKanji = (text: string) => /[\u4E00-\u9FFF]/.test(text);
     
     return (
       <div className={`self-${align} w-full max-w-[90%] ${align === 'start' ? 'pl-2 sm:pl-4 md:pl-10 text-left' : 'pr-2 sm:pr-4 md:pr-10 text-right'} relative`}>
-        <div className={`flex flex-col gap-1 ${align === 'end' ? 'items-end' : 'items-start'}`}>
-          {isJapanese && pronunciationMap.has(lineIndex) && (
-            <div className={`text-sm sm:text-base md:text-lg lg:text-xl font-bold ${isLineWaiting ? 'text-white/50' : 'text-yellow-300/80'}`} style={{ WebkitTextStroke: '1px rgba(0,0,0,0.6)', paintOrder: 'stroke fill' }}>
-              {pronunciationMap.get(lineIndex)?.words
-                ? pronunciationMap.get(lineIndex)!.words!.map((w, i) => <span key={i} className="mr-2">{w.pronunciation}</span>)
-                : pronunciationMap.get(lineIndex)?.text}
+        <div className={`flex flex-col gap-0 ${align === 'end' ? 'items-end' : 'items-start'}`}>
+          {/* Layer 1: Korean pronunciation (한국어 발음) — white + black stroke, no blue fill */}
+          {hasPron && (
+            <div
+              className={`text-base sm:text-lg md:text-xl lg:text-2xl xl:text-3xl font-bold leading-tight ${isLineWaiting ? 'text-white/50' : 'text-white/90'}`}
+              style={{ WebkitTextStroke: '1.5px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}
+            >
+              {pronData?.words
+                ? pronData.words.map((w, i) => <span key={i} className="mr-1">{w.pronunciation}</span>)
+                : pronData?.text}
             </div>
           )}
-          <div className={`flex flex-wrap gap-x-4 leading-normal ${align === 'end' ? 'justify-end' : 'justify-start'}`}>
+          {/* Layer 2+3: Furigana + Main text — rendered as ruby-style inline for each word */}
+          <div className={`flex flex-wrap gap-x-1 sm:gap-x-2 leading-normal ${align === 'end' ? 'justify-end' : 'justify-start'}`}>
             {(() => {
               if (line.words && line.words.length > 0) {
                 return line.words.map((word, i) => {
                   const progress = getWordProgressInLine(line, i);
+                  const wordFuri = pronData?.words?.[i]?.furigana || getWordFurigana(word.text);
+                  const showFurigana = isJapanese && wordFuri && hasKanji(word.text);
                   return (
-                    <span key={i} className="relative block text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black">
-                      <span className={`text-white relative z-10 ${isLineWaiting ? 'opacity-70' : 'opacity-100'}`} style={{ WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{word.text}</span>
-                      <span className="absolute left-0 top-0 text-cyan-400 whitespace-nowrap z-20" style={{ clipPath: `inset(-0.25em ${100 - progress}% -0.25em 0)`, transition: 'clip-path 60ms linear', WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{word.text}</span>
+                    <span key={i} className="relative inline-flex flex-col items-center">
+                      {showFurigana && (
+                        <span
+                          className={`text-xs sm:text-sm md:text-base font-bold leading-none ${isLineWaiting ? 'text-white/40' : 'text-white/70'}`}
+                          style={{ WebkitTextStroke: '0.5px rgba(0,0,0,0.6)', paintOrder: 'stroke fill' }}
+                        >
+                          {wordFuri}
+                        </span>
+                      )}
+                      <span className="relative text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black leading-tight">
+                        <span className={`text-white relative z-10 ${isLineWaiting ? 'opacity-70' : 'opacity-100'}`} style={{ WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{word.text}</span>
+                        <span className="absolute left-0 top-0 text-cyan-400 whitespace-nowrap z-20" style={{ clipPath: `inset(-0.25em ${100 - progress}% -0.25em 0)`, transition: 'clip-path 60ms linear', WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{word.text}</span>
+                      </span>
                     </span>
                   );
                 });
               } else {
+                if (hasFurigana && furiganaData) {
+                  return furiganaData.map((segment, i) => {
+                    const showFuri = segment.reading && hasKanji(segment.original);
+                    return (
+                      <span key={i} className="relative inline-flex flex-col items-center">
+                        {showFuri && (
+                          <span
+                            className={`text-xs sm:text-sm md:text-base font-bold leading-none ${isLineWaiting ? 'text-white/40' : 'text-white/70'}`}
+                            style={{ WebkitTextStroke: '0.5px rgba(0,0,0,0.6)', paintOrder: 'stroke fill' }}
+                          >
+                            {segment.reading}
+                          </span>
+                        )}
+                        <span className="relative text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black leading-tight">
+                          <span className={`text-white ${isLineWaiting ? 'opacity-70' : 'opacity-100'}`} style={{ WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{segment.original}</span>
+                          <span className="absolute left-0 top-0 text-cyan-400 whitespace-nowrap" style={{ clipPath: `inset(-0.25em ${100 - getLineProgress(line)}% -0.25em 0)`, WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{segment.original}</span>
+                        </span>
+                      </span>
+                    );
+                  });
+                }
                 return (
                   <div className="relative text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black">
                     <span className={`text-white ${isLineWaiting ? 'opacity-70' : 'opacity-100'}`} style={{ WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{line.text}</span>
