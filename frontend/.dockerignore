@@ -3,6 +3,10 @@ node_modules
 .git
 .gitignore
 *.md
+e2e
+playwright.config.*
+playwright-report
+test-results
 .env.development
 .env.production
 Dockerfile
