@@ -3,9 +3,23 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Mic, MicOff, Pause, Play, RotateCcw, SkipForward, Volume2, AlertCircle } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Mic,
+  MicOff,
+  Pause,
+  Play,
+  RotateCcw,
+  SkipForward,
+  Volume2,
+  AlertCircle,
+  Video,
+  CameraOff,
+  Music2,
+} from "lucide-react";
 import type { RootState } from "@/store";
-import { updateCurrentTime, setGameStatus } from "@/store/slices/gameSlice";
+import { updateCurrentTime } from "@/store/slices/gameSlice";
 import { getSocket } from "@/lib/socket";
 
 interface LyricsWord {
@@ -37,7 +51,7 @@ const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", 
 const VISIBLE_WINDOW = 8;
 const HIT_LINE_RATIO = 0.2;
 const MIDI_MIN = 36;
-const MIDI_MAX = 76;
+const MIDI_MAX = 83;
 const USER_TRAIL_SECONDS = 4;
 const LABEL_AREA_WIDTH = 64;
 const SMOOTHING_WINDOW_SIZE = 5;
@@ -51,6 +65,8 @@ const SYNC_CONFIG = {
 };
 
 type JudgmentLabel = "PERFECT" | "GREAT" | "GOOD" | "NORMAL" | "BAD";
+
+type GamePhase = "intro" | "countdown" | "singing";
 
 type GameStats = {
   totalWords: number;
@@ -176,7 +192,9 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
   const previousSingerIdRef = useRef<number | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isManuallyPaused, setIsManuallyPaused] = useState(false);
   const [isMicOn, setIsMicOn] = useState(true);
+  const [isCamOn, setIsCamOn] = useState(true);
   const [duration, setDuration] = useState(0);
   const [audioLoaded, setAudioLoaded] = useState(false);
   const [score, setScore] = useState(0);
@@ -195,6 +213,33 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
   const lyrics: LyricsLine[] = currentSong?.lyrics || [];
   const audioUrl = currentSong?.instrumentalUrl || currentSong?.audioUrl;
   const progress = duration ? (localTime / duration) * 100 : 0;
+
+  const gamePhase: GamePhase = useMemo(() => {
+    if (lyrics.length === 0) return "intro";
+    const firstLyricStart = lyrics[0].startTime;
+    const countdownStart = Math.max(0, firstLyricStart - 4);
+    const countdownEnd = firstLyricStart;
+    if (localTime < countdownStart) return "intro";
+    if (localTime < countdownEnd) return "countdown";
+    return "singing";
+  }, [localTime, lyrics]);
+
+  const countdownNumber = useMemo(() => {
+    if (gamePhase !== "countdown" || lyrics.length === 0) return 0;
+    const remaining = Math.ceil(lyrics[0].startTime - localTime);
+    return Math.max(0, Math.min(3, remaining));
+  }, [gamePhase, localTime, lyrics]);
+
+  const isInterlude = useMemo(() => {
+    if (gamePhase !== "singing") return false;
+    if (currentLyricIndex !== -1) return false;
+    const nextIdx = lyrics.findIndex((l) => l.startTime > localTime);
+    if (nextIdx < 0) return false;
+    if (nextIdx === 0) return true;
+    const prevLine = lyrics[nextIdx - 1];
+    const nextLine = lyrics[nextIdx];
+    return nextLine.startTime - prevLine.endTime > 3;
+  }, [currentLyricIndex, gamePhase, lyrics, localTime]);
 
   const renderLine = useCallback((lineIndex: number, align: 'start' | 'end') => {
     const line = lyrics[lineIndex];
@@ -415,7 +460,7 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
 
   useEffect(() => {
     if (!audioRef.current || !audioLoaded) return;
-    if (status === "playing" && !isPlaying) {
+    if (status === "playing" && !isPlaying && !isManuallyPaused) {
       audioRef.current.play().catch(console.error);
       setIsPlaying(true);
     }
@@ -427,7 +472,10 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
       audioRef.current.pause();
       setIsPlaying(false);
     }
-  }, [audioLoaded, isPlaying, status]);
+    if (status !== "playing" && isManuallyPaused) {
+      setIsManuallyPaused(false);
+    }
+  }, [audioLoaded, isManuallyPaused, isPlaying, status]);
 
   useEffect(() => {
     if (!shouldCaptureMic) {
@@ -453,6 +501,7 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
       setCurrentSingerId(payload.currentSingerId);
       setCurrentSingerNickname(payload.currentSingerNickname);
       resetRoundMetrics();
+      setIsManuallyPaused(false);
 
       if (!audioRef.current) return;
       audioRef.current.pause();
@@ -473,17 +522,45 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
     if (!audioRef.current || !audioLoaded) return;
     if (isPlaying) {
       audioRef.current.pause();
-      dispatch(setGameStatus("paused"));
       setIsPlaying(false);
+      setIsManuallyPaused(true);
     } else {
       audioRef.current.play().catch(console.error);
       if (shouldCaptureMic && !analyserRef.current) {
         startMicrophone();
       }
-      dispatch(setGameStatus("playing"));
       setIsPlaying(true);
+      setIsManuallyPaused(false);
     }
-  }, [audioLoaded, dispatch, isPlaying, shouldCaptureMic, startMicrophone]);
+  }, [audioLoaded, isPlaying, shouldCaptureMic, startMicrophone]);
+
+  const handleMicToggle = useCallback(() => {
+    window.dispatchEvent(new Event("kero:toggleMic"));
+    setIsMicOn((prev) => !prev);
+  }, []);
+
+  const handleCameraToggle = useCallback(() => {
+    window.dispatchEvent(new Event("kero:toggleCamera"));
+    setIsCamOn((prev) => !prev);
+  }, []);
+
+  // Sync LiveKit mic/cam state from VideoRoom via custom events
+  useEffect(() => {
+    const handleMicStatus = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (typeof detail?.isMicOn === "boolean") setIsMicOn(detail.isMicOn);
+    };
+    const handleCamStatus = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (typeof detail?.isCamOn === "boolean") setIsCamOn(detail.isCamOn);
+    };
+    window.addEventListener("kero:micStatus", handleMicStatus);
+    window.addEventListener("kero:camStatus", handleCamStatus);
+    return () => {
+      window.removeEventListener("kero:micStatus", handleMicStatus);
+      window.removeEventListener("kero:camStatus", handleCamStatus);
+    };
+  }, []);
 
   const handleRestart = useCallback(() => {
     if (!audioRef.current) return;
@@ -1208,66 +1285,99 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
 
       <div className="absolute inset-0 opacity-[0.15] pointer-events-none" style={{ backgroundImage: "radial-gradient(circle at 20% 20%, rgba(240,192,64,0.35), transparent 35%), radial-gradient(circle at 80% 0%, rgba(78,205,196,0.25), transparent 30%)" }} />
 
-      <div className="relative z-10 flex h-full w-full flex-col px-3 pb-4 pt-3 sm:px-5 sm:pt-4">
-        <div className="mb-3 rounded-2xl border border-white/15 bg-white/[0.05] px-4 py-3 backdrop-blur-xl sm:px-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.35em] text-white/55">Now Singing</p>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-semibold text-white sm:text-xl">{currentSingerNickname || "대기 중"}</span>
-                {isMyTurn && <span className="rounded-full bg-[#f0c040]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#f0c040]">Your turn!</span>}
-              </div>
-            </div>
-
-            <div className="min-w-0 flex-1 text-center sm:max-w-[46%]">
-              <h1 className="truncate text-base font-semibold text-white sm:text-lg">{currentSong.title}</h1>
-              <p className="truncate text-xs uppercase tracking-[0.26em] text-white/55">{currentSong.artist}</p>
-            </div>
-
-            <div className="flex items-center gap-3 sm:gap-5">
-              <div className="text-right">
-                <p className="text-[10px] uppercase tracking-[0.28em] text-white/55">Score</p>
-                <p className="text-2xl font-bold text-[#f0c040]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{score.toFixed(2)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] uppercase tracking-[0.28em] text-white/55">Combo</p>
-                <p className="text-2xl font-bold text-[#4ecdc4]" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{combo}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Judgment Score Bar — TJ parallelogram style */}
-        <div className="mb-2 flex h-7 w-full items-center gap-[2px]" data-testid="perfect-judgment-bar">
-          {JUDGMENT_SEGMENTS.map((seg) => {
-            const isActive = currentJudgment === seg.key;
-            return (
+      <AnimatePresence>
+        {gamePhase === "intro" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.4 } }}
+            className="absolute inset-0 z-30 flex flex-col items-center justify-center"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.5, type: "spring", damping: 20 }}
+              className="relative w-[92%] max-w-2xl"
+            >
               <div
-                key={seg.key}
-                className="flex h-full flex-1 items-center justify-center transition-all duration-200"
-                style={{
-                  transform: "skewX(-20deg)",
-                  backgroundColor: isActive ? seg.color : "rgba(0,0,0,0.6)",
-                  border: isActive ? `1px solid ${seg.color}` : "1px solid rgba(255,255,255,0.1)",
-                  boxShadow: isActive ? `0 0 12px ${seg.color}80` : "none",
-                }}
+                className="overflow-hidden rounded-3xl border border-white/10 shadow-2xl"
+                style={{ background: "linear-gradient(135deg, rgba(17,24,39,0.75) 0%, rgba(6,182,212,0.14) 45%, rgba(240,192,64,0.12) 100%)" }}
               >
-                <span
-                  className={`text-[9px] font-bold uppercase tracking-wider transition-all sm:text-[10px] ${isActive ? "text-white" : "text-white/30"}`}
-                  style={{ transform: "skewX(20deg)" }}
-                >
-                  {seg.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+                <div className="px-8 py-10 sm:px-12 sm:py-14 text-center">
+                  <motion.h1
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25, duration: 0.4 }}
+                    className="text-4xl font-black tracking-tight text-white sm:text-5xl md:text-7xl"
+                    style={{ textShadow: "0 2px 22px rgba(0,0,0,0.55)" }}
+                  >
+                    {currentSong.title}
+                  </motion.h1>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.45, duration: 0.35 }}
+                    className="mt-4 flex items-center justify-center gap-3"
+                  >
+                    <span className="block h-px w-8 bg-white/25" />
+                    <p className="text-xl font-medium tracking-wide text-white/80 sm:text-2xl md:text-3xl">
+                      {currentSong.artist}
+                    </p>
+                    <span className="block h-px w-8 bg-white/25" />
+                  </motion.div>
+                </div>
 
-        <div className="relative flex min-h-0 flex-1 gap-3 lg:gap-4" data-testid="perfect-layout-shell">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.65, duration: 0.25 }}
+                  className="flex items-center justify-center gap-6 border-t border-white/10 bg-black/20 px-6 py-3 text-xs font-medium tracking-wide text-[#f0c040]/90 sm:px-10 sm:text-sm"
+                >
+                  {currentSong.lyricist && <span>작사 {currentSong.lyricist}</span>}
+                  {currentSong.lyricist && currentSong.composer && <span className="text-white/20">|</span>}
+                  {currentSong.composer && <span>작곡 {currentSong.composer}</span>}
+                  {!currentSong.lyricist && !currentSong.composer && <span className="text-white/40">♪</span>}
+                </motion.div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {gamePhase === "countdown" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.2 } }}
+            className="absolute inset-0 z-30 flex items-center justify-center"
+          >
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={countdownNumber}
+                initial={{ scale: 2, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.55, opacity: 0 }}
+                transition={{ duration: 0.42, type: "spring", damping: 15 }}
+                className="tabular-nums text-8xl font-black text-white sm:text-[150px]"
+                style={{ textShadow: "0 0 70px rgba(6,182,212,0.45), 0 4px 22px rgba(0,0,0,0.55)" }}
+              >
+                {countdownNumber > 0 ? countdownNumber : "♪"}
+              </motion.span>
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="relative z-10 flex h-full w-full flex-col px-3 pb-4 pt-3 sm:px-5 sm:pt-4">
+        <div className="relative flex min-h-0 flex-1 gap-3 overflow-visible lg:gap-4" data-testid="perfect-layout-shell">
           {/* Turn sidebar - moved to LEFT */}
-          <aside className={`${isSidebarCollapsed ? "w-10" : "w-[180px]"} order-first hidden h-full shrink-0 flex-col rounded-2xl border border-white/15 bg-white/[0.05] p-2 backdrop-blur-xl transition-all duration-300 lg:flex`} data-testid="perfect-turn-sidebar">
+          <aside
+            className={`${isSidebarCollapsed ? "w-10" : "w-[140px]"} order-first hidden h-full flex-shrink-0 flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/[0.05] p-1.5 backdrop-blur-xl transition-[width] duration-300 will-change-[width] lg:flex`}
+            data-testid="perfect-turn-sidebar"
+          >
             <button
-              className="mb-2 flex h-7 w-7 items-center justify-center self-end rounded-full border border-white/20 bg-white/10 text-white/75 hover:bg-white/20"
+              className="mb-1.5 flex h-6 w-6 items-center justify-center self-end rounded-full border border-white/20 bg-white/10 text-white/75 hover:bg-white/20"
               onClick={() => setIsSidebarCollapsed((prev) => !prev)}
             >
               {isSidebarCollapsed ? <ChevronLeft className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
@@ -1275,18 +1385,21 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
 
             {!isSidebarCollapsed && (
               <>
-                <p className="mb-2 text-[9px] uppercase tracking-[0.3em] text-white/55 pl-1">Turn Order</p>
-                <div className="space-y-1.5 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
+                <p className="mb-1.5 pl-1 text-[9px] uppercase tracking-[0.28em] text-white/55">Turn</p>
+                <div className="custom-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
                   {participants.map((participant, index) => {
                     const isActive = String(participant.id) === String(currentSingerId);
                     const scoreValue = turnScores[String(participant.id)] ?? 0;
                     return (
-                      <div key={String(participant.id)} className={`rounded-lg border px-2 py-1.5 ${isActive ? "border-[#f0c040]/55 bg-[#f0c040]/10" : "border-white/10 bg-white/[0.03]"}`}>
-                        <div className="flex items-center justify-between min-w-0">
-                          <span className="text-[10px] text-white/65 shrink-0 mr-1">{index + 1}</span>
-                          <span className="text-xs font-medium text-white truncate min-w-0 flex-1">{participant.nickname}</span>
+                      <div
+                        key={String(participant.id)}
+                        className={`rounded-lg border px-2 py-1 ${isActive ? "border-[#f0c040]/55 bg-[#f0c040]/10" : "border-white/10 bg-white/[0.03]"}`}
+                      >
+                        <div className="flex min-w-0 items-center justify-between gap-2">
+                          <span className="mr-1 shrink-0 text-[10px] text-white/55">{index + 1}</span>
+                          <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-white/90">{participant.nickname}</span>
                         </div>
-                        <div className="mt-0.5 text-right text-[10px] text-white/55" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                        <div className="mt-0.5 text-right text-[9px] text-white/55" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                           {scoreValue.toFixed(0)} pts
                         </div>
                       </div>
@@ -1298,7 +1411,7 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
           </aside>
 
           {/* Main content (canvas + lyrics) */}
-          <div className="relative flex flex-1 flex-col min-h-0" data-testid="perfect-main-content">
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col" data-testid="perfect-main-content">
             <div className="relative flex-1 min-h-0 overflow-hidden rounded-t-3xl border border-white/15 bg-white/[0.03] backdrop-blur-lg">
               <div ref={containerRef} className="h-full w-full">
                 <canvas ref={canvasRef} className="h-full w-full" />
@@ -1322,6 +1435,22 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
                     Snap {snapNoteLabel}
                   </span>
                 )}
+              </div>
+
+              {/* Score / Combo overlay (100-point normalized score) */}
+              <div className="pointer-events-none absolute right-3 top-3">
+                <div className="rounded-2xl border border-white/15 bg-black/35 px-3 py-2 backdrop-blur-xl">
+                  <p className="text-[10px] uppercase tracking-[0.28em] text-white/60">Score</p>
+                  <div className="mt-0.5 flex items-end justify-end gap-2">
+                    <span className="text-3xl font-black text-[#f0c040] sm:text-4xl" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                      {scorePercent}
+                    </span>
+                    <span className="pb-1 text-[11px] font-semibold text-white/55">/ 100</span>
+                  </div>
+                  <div className="mt-0.5 text-right text-[10px] uppercase tracking-[0.24em] text-white/55">
+                    Combo <span className="font-bold text-[#4ecdc4]">{combo}</span>
+                  </div>
+                </div>
               </div>
 
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
@@ -1352,20 +1481,116 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
               </div>
             </div>
 
-            {/* Playback Progress Bar */}
-            <div className="flex items-center gap-3 px-4 py-2 border-x border-white/15 bg-white/[0.03] backdrop-blur-lg">
-               <button disabled className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/40">
-                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-               </button>
-               <span className="text-xs text-white/50 font-mono w-10 text-right">{formatTime(localTime)}</span>
-               <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden relative" onClick={handleSeek} style={{ cursor: 'pointer' }}>
-                 <div className="h-full bg-gradient-to-r from-cyan-400 to-amber-400 absolute left-0 top-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} />
-               </div>
-               <span className="text-xs text-white/50 font-mono w-10">{formatTime(duration)}</span>
+            {/* Integrated control bar (no lyrics overlap) */}
+            <div className="flex flex-wrap items-center gap-2 border-x border-white/15 bg-white/[0.03] px-4 py-2 backdrop-blur-lg sm:gap-3">
+              <button disabled className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/40">
+                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              </button>
+
+              <span className="w-10 text-right font-mono text-xs text-white/50">{formatTime(localTime)}</span>
+
+              <div
+                className="relative h-1.5 flex-1 cursor-pointer overflow-hidden rounded-full bg-white/10"
+                onClick={handleSeek}
+              >
+                <div
+                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-cyan-400 to-amber-400 transition-all duration-100 ease-linear"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+
+              <span className="w-10 font-mono text-xs text-white/50">{formatTime(duration)}</span>
+
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setVolume((v) => (v === 0 ? 1 : 0))}
+                    className={`rounded-full border p-2 ${volume === 0 ? "border-white/20 bg-white/10 text-white/50" : "border-white/20 bg-white/10 text-white/80 hover:bg-white/20"}`}
+                    type="button"
+                    title={volume === 0 ? "Unmute" : "Mute"}
+                  >
+                    <Volume2 className="h-4 w-4" />
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={volume}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      setVolume(v);
+                      if (audioRef.current) audioRef.current.volume = v;
+                    }}
+                    className="w-16 accent-[#f0c040] sm:w-24"
+                    aria-label="Volume"
+                  />
+                </div>
+
+                <button
+                  onClick={handleMicToggle}
+                  disabled={!isMyTurn}
+                  className={`rounded-full border p-2 ${isMyTurn ? "border-[#4ecdc4]/60 bg-[#4ecdc4]/12 text-[#9efff8]" : "border-white/20 bg-white/10 text-white/40"}`}
+                  type="button"
+                  title={isMicOn ? "Mic on" : "Mic off"}
+                >
+                  {isMicOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                </button>
+
+                <button
+                  onClick={handleCameraToggle}
+                  disabled={!cameraElement}
+                  className={`rounded-full border p-2 ${cameraElement ? "border-white/20 bg-white/10 text-white/80 hover:bg-white/20" : "border-white/20 bg-white/10 text-white/40"}`}
+                  type="button"
+                  title={isCamOn ? "Camera on" : "Camera off"}
+                >
+                  {isCamOn ? <Video className="h-4 w-4" /> : <CameraOff className="h-4 w-4" />}
+                </button>
+
+                <button
+                  onClick={handleRestart}
+                  className="rounded-full border border-white/20 bg-white/10 p-2 text-white/80 hover:bg-white/20"
+                  type="button"
+                  title="Restart"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+
+                <button
+                  onClick={() => window.dispatchEvent(new Event("kero:skipForward"))}
+                  className="rounded-full border border-white/20 bg-white/10 p-2 text-white/80 hover:bg-white/20"
+                  type="button"
+                  title="Skip"
+                >
+                  <SkipForward className="h-4 w-4" />
+                </button>
+
+                <button
+                  onClick={passTurn}
+                  disabled={!isMyTurn}
+                  className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.24em] ${isMyTurn ? "bg-[#f0c040] text-[#101018]" : "bg-white/10 text-white/45"}`}
+                  type="button"
+                >
+                  패스
+                </button>
+
+                <button
+                  onClick={() => window.dispatchEvent(new Event("kero:openQueue"))}
+                  className="relative flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white/80 hover:bg-white/20"
+                  type="button"
+                  title="Song queue"
+                >
+                  <Music2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Queue</span>
+                  <span className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-white/15 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-white">
+                    {songQueue.length}
+                  </span>
+                </button>
+              </div>
             </div>
 
             {/* Lyrics Area */}
-            <div className="relative shrink-0 min-h-[160px] sm:min-h-[200px] rounded-b-3xl border border-white/15 bg-white/[0.04] p-4 sm:p-6 backdrop-blur-xl flex flex-col justify-center overflow-hidden">
+            <div className="relative flex shrink-0 min-h-[200px] flex-col justify-center overflow-hidden rounded-b-3xl border border-white/15 bg-white/[0.04] p-4 backdrop-blur-xl sm:min-h-[240px] sm:p-6">
                {onBackAction && (
                   <button
                     onClick={onBackAction}
@@ -1376,100 +1601,78 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
                 )}
 
                <AnimatePresence mode="wait">
-                 {currentLyricIndex >= 0 && (() => {
-                   const pairIndex = Math.floor(currentLyricIndex / 2);
-                   const lineAIndex = pairIndex * 2;
-                   const lineBIndex = pairIndex * 2 + 1;
-                   return (
-                     <motion.div
-                       key={`pair-${pairIndex}`}
-                       initial={{ opacity: 0, y: 20 }}
-                       animate={{ opacity: 1, y: 0 }}
-                       exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
-                       transition={{ duration: 0.3 }}
-                       className="flex flex-col gap-4 sm:gap-6 w-full"
-                     >
-                       {renderLine(lineAIndex, 'start')}
-                       {lyrics[lineBIndex] && renderLine(lineBIndex, 'end')}
-                     </motion.div>
-                   );
-                 })()}
-               </AnimatePresence>
+                 {gamePhase === "singing" && !isInterlude && currentLyricIndex >= 0 && (() => {
+                    const pairIndex = Math.floor(currentLyricIndex / 2);
+                    const lineAIndex = pairIndex * 2;
+                    const lineBIndex = pairIndex * 2 + 1;
+                    return (
+                      <motion.div
+                        key={`pair-${pairIndex}`}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
+                        transition={{ duration: 0.3 }}
+                        className="flex flex-col gap-4 sm:gap-6 w-full"
+                      >
+                        {renderLine(lineAIndex, 'start')}
+                        {lyrics[lineBIndex] && renderLine(lineBIndex, 'end')}
+                      </motion.div>
+                    );
+                  })()}
+                </AnimatePresence>
+
+                <AnimatePresence>
+                  {gamePhase === "singing" && isInterlude && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.35 }}
+                      className="flex items-center justify-center"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="block h-px w-8 bg-white/25" />
+                        <span className="text-lg font-medium tracking-[0.3em] text-white/50 sm:text-xl md:text-2xl">간주중</span>
+                        <span className="block h-px w-8 bg-white/25" />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
             </div>
           </div>
 
           {/* Camera aside - RIGHT side */}
           {cameraElement && (
-            <aside className="hidden lg:block h-full w-[280px] xl:w-[320px] shrink-0 rounded-2xl overflow-hidden border border-white/15 bg-black/50 shadow-2xl" data-testid="perfect-camera-panel">
+            <aside className="hidden h-full w-[280px] flex-shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-black/50 shadow-2xl lg:block xl:w-[320px]" data-testid="perfect-camera-panel">
               <div className="h-full w-full">{cameraElement}</div>
             </aside>
           )}
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center px-3 sm:px-6">
-          <div className="pointer-events-auto flex w-full max-w-4xl items-center justify-between gap-2 rounded-2xl border border-white/20 bg-white/[0.08] px-3 py-2 backdrop-blur-2xl sm:px-4 sm:py-3">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setVolume((v) => (v === 0 ? 1 : 0))}
-                className="rounded-full border border-white/20 bg-white/10 p-2 text-white/80 hover:bg-white/20"
-              >
-                <Volume2 className="h-4 w-4" />
-              </button>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={volume}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  setVolume(v);
-                  if (audioRef.current) audioRef.current.volume = v;
+        {/* Judgment Score Bar — TJ parallelogram style */}
+        <div className="mt-2 flex h-7 w-full flex-shrink-0 items-center gap-[2px]" data-testid="perfect-judgment-bar">
+          {JUDGMENT_SEGMENTS.map((seg) => {
+            const isActive = currentJudgment === seg.key;
+            return (
+              <div
+                key={seg.key}
+                className="flex h-full flex-1 items-center justify-center transition-all duration-200"
+                style={{
+                  transform: "skewX(-20deg)",
+                  backgroundColor: isActive ? seg.color : "rgba(0,0,0,0.6)",
+                  border: isActive ? `1px solid ${seg.color}` : "1px solid rgba(255,255,255,0.1)",
+                  boxShadow: isActive ? `0 0 12px ${seg.color}80` : "none",
                 }}
-                className="w-16 accent-[#f0c040] sm:w-24"
-              />
-              <button
-                onClick={() => setIsMicOn((prev) => !prev)}
-                disabled={!isMyTurn}
-                className={`rounded-full border p-2 ${isMyTurn ? "border-[#4ecdc4]/60 bg-[#4ecdc4]/12 text-[#9efff8]" : "border-white/20 bg-white/10 text-white/40"}`}
               >
-                {isMicOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                onClick={handleRestart}
-                className="rounded-full border border-white/20 bg-white/10 p-2 text-white/80 hover:bg-white/20"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </button>
-              <button
-                onClick={togglePlay}
-                disabled={!audioLoaded}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f0c040] text-[#101018] shadow-lg shadow-[#f0c040]/35 disabled:opacity-50"
-              >
-                {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="ml-0.5 h-5 w-5" />}
-              </button>
-              <button
-                onClick={() => window.dispatchEvent(new Event("kero:skipForward"))}
-                className="rounded-full border border-white/20 bg-white/10 p-2 text-white/80 hover:bg-white/20"
-              >
-                <SkipForward className="h-4 w-4" />
-              </button>
-              <button
-                onClick={passTurn}
-                disabled={!isMyTurn}
-                className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.24em] ${isMyTurn ? "bg-[#f0c040] text-[#101018]" : "bg-white/10 text-white/45"}`}
-              >
-                패스
-              </button>
-            </div>
-
-            <div className="hidden min-w-[84px] text-right text-[11px] uppercase tracking-[0.23em] text-white/55 sm:block">
-              {songQueue.length} queue
-            </div>
-          </div>
+                <span
+                  className={`text-[9px] font-bold uppercase tracking-wider transition-all sm:text-[10px] ${isActive ? "text-white" : "text-white/30"}`}
+                  style={{ transform: "skewX(20deg)" }}
+                >
+                  {seg.label}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -1505,7 +1708,11 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
                       {grade}
                       <span className="absolute -inset-8 -z-10 rounded-full border border-white/20" />
                     </motion.p>
-                    <p className="text-2xl font-bold text-white/88" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{score.toFixed(2)}</p>
+                    <div className="text-right" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                      <p className="text-[10px] uppercase tracking-[0.28em] text-white/55">Score</p>
+                      <p className="text-4xl font-black text-[#f0c040] tabular-nums">{scorePercent}</p>
+                      <p className="-mt-1 text-xs font-semibold text-white/55">/ 100</p>
+                    </div>
                   </div>
 
                   <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">

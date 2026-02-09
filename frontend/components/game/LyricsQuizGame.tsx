@@ -105,7 +105,8 @@ export default function LyricsQuizGame({
    const [wrongCount, setWrongCount] = useState(0);
    const [maxStreakLocal, setMaxStreakLocal] = useState(0);
    const [localIdentity, setLocalIdentity] = useState<{ id: string; name: string }>({ id: "", name: "" });
-   const [audioLoading, setAudioLoading] = useState(false);
+    const [audioLoading, setAudioLoading] = useState(false);
+    const [audioPlayFailed, setAudioPlayFailed] = useState(false);
 
    useEffect(() => {
      const userRaw = localStorage.getItem("user");
@@ -127,9 +128,10 @@ export default function LyricsQuizGame({
 
    useEffect(() => {
      if (currentQuestion) {
-       setTimeLeft(currentQuestion.timeLimit || 20);
-       setOrdering([]);
-       setTextAnswer("");
+        setTimeLeft(currentQuestion.timeLimit || 20);
+        setAudioPlayFailed(false);
+        setOrdering([]);
+        setTextAnswer("");
        setSubmitted(false);
        setShowResults(false);
      }
@@ -193,7 +195,7 @@ export default function LyricsQuizGame({
       const startTime = currentQuestion.metadata?.audioStartTime || 0;
       audio.currentTime = startTime;
       audio.volume = 0.5;
-      audio.play().catch(() => {});
+      audio.play().catch(() => setAudioPlayFailed(true));
       
       return () => {
         audio.pause();
@@ -211,7 +213,7 @@ export default function LyricsQuizGame({
       audio.volume = 0.5;
       audio.addEventListener("canplay", () => {
         setAudioLoading(false);
-        audio.play().catch(() => {});
+        audio.play().catch(() => setAudioPlayFailed(true));
       });
       audio.addEventListener("error", () => {
         setAudioLoading(false);
@@ -910,6 +912,16 @@ export default function LyricsQuizGame({
 
         <div className="flex flex-1 min-h-0 flex-col gap-4 pt-2 sm:gap-6 lg:flex-row" data-testid="quiz-layout-shell">
           <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-6" data-testid="quiz-main-content">
+            {cameraElement && (
+              <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-white/10 border border-white/10 shrink-0">
+                <div className="flex flex-col">
+                  <span className="text-[10px] sm:text-xs font-bold text-white/60 uppercase tracking-widest">Score</span>
+                  <span className="text-lg sm:text-2xl font-black text-white">{localScore.toLocaleString()}</span>
+                </div>
+                <TimerCircle timeLeft={timeLeft} timeLimit={currentQuestion.timeLimit || 20} />
+              </div>
+            )}
+
             <div className="w-full min-h-[170px] sm:min-h-[220px] bg-white rounded-2xl shadow-2xl flex flex-col items-center justify-center p-4 sm:p-8 text-center relative overflow-hidden group">
               <div className="absolute top-0 left-0 w-full h-2 bg-[#46178F]"></div>
 
@@ -933,8 +945,18 @@ export default function LyricsQuizGame({
                     {getQuestionHeader()}
                   </span>
                   <span className="text-base sm:text-lg font-bold text-gray-400">
-                    {audioLoading ? "로딩 중..." : "노래를 듣고 맞춰보세요"}
+                    {audioLoading ? "로딩 중..." : audioPlayFailed ? "자동 재생이 차단되었습니다" : "노래를 듣고 맞춰보세요"}
                   </span>
+                  {audioPlayFailed && (
+                    <button
+                      onClick={() => {
+                        audioRef.current?.play().then(() => setAudioPlayFailed(false)).catch(() => {});
+                      }}
+                      className="mt-2 px-6 py-2 bg-[#46178F] hover:bg-[#46178F]/80 text-white font-bold rounded-full text-sm sm:text-base transition-colors"
+                    >
+                      🔊 클릭하여 재생
+                    </button>
+                  )}
                 </div>
               ) : (
                 <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-gray-800 leading-tight max-w-5xl">
@@ -963,17 +985,8 @@ export default function LyricsQuizGame({
             <div className="flex-1 w-full relative min-h-0">{renderQuestionContent()}</div>
           </div>
           {cameraElement && (
-            <aside className="flex flex-col gap-3 h-[180px] w-full shrink-0 lg:h-full lg:w-[320px] xl:w-[360px]" data-testid="quiz-camera-panel">
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-black/40 border border-white/10 shrink-0">
-                <div className="flex flex-col">
-                  <span className="text-[10px] sm:text-xs font-bold text-white/60 uppercase tracking-widest">Score</span>
-                  <span className="text-lg sm:text-2xl font-black text-white">{localScore.toLocaleString()}</span>
-                </div>
-                <TimerCircle timeLeft={timeLeft} timeLimit={currentQuestion.timeLimit || 20} />
-              </div>
-              <div className="flex-1 min-h-0 rounded-2xl overflow-hidden border border-white/20 bg-black/50 shadow-2xl [&_video]:object-cover [&_video]:w-full [&_video]:h-full">
-                <div className="h-full w-full [&>div]:h-full [&>div]:w-full [&>div>div]:h-full [&>div>div]:w-full">{cameraElement}</div>
-              </div>
+            <aside className="h-[200px] w-full shrink-0 lg:h-full lg:w-[320px] xl:w-[360px] rounded-2xl overflow-hidden border border-white/20 bg-black shadow-2xl" data-testid="quiz-camera-panel">
+              <div className="h-full w-full [&_video]:object-cover [&_video]:w-full [&_video]:h-full [&>div]:h-full [&>div]:w-full [&>div>div]:h-full [&>div>div]:w-full [&>div>div>div]:h-full [&>div>div>div]:w-full">{cameraElement}</div>
             </aside>
           )}
         </div>
@@ -987,7 +1000,7 @@ export default function LyricsQuizGame({
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             className={`fixed bottom-0 left-0 h-auto py-6 sm:h-48 sm:py-0 z-40 flex items-center justify-center
-              ${cameraElement ? "right-0 lg:right-[320px] xl:right-[360px]" : "right-0"}
+              ${cameraElement ? "right-0 lg:right-[336px] xl:right-[376px]" : "right-0"}
               ${roundResults.find(r => r.odId === "local" || r.odName === "나")?.isCorrect ? "bg-[#26890C]" : "bg-[#E21B3C]"}
             `}
           >

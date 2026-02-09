@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useRef, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { Application, SPEObject, SplineEvent } from "@splinetool/runtime";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -31,7 +31,6 @@ const AnimatedBackground = () => {
   const isMobile = useMediaQuery("(max-width: 767px)");
   const [splineApp, setSplineApp] = useState<Application>();
   const selectedSkillRef = React.useRef<Skill | null>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
 
   const { playPressSound, playReleaseSound } = useSounds();
   const { isLoading, bypassLoading } = usePreloader();
@@ -310,55 +309,99 @@ const AnimatedBackground = () => {
 
   // --- Effects ---
 
-  // Pointer event overlay: intercept pointer events and forward with DPR-scaled coordinates
-  // Spline renders canvas at 2x (DPR) but uses raw client coords for raycasting,
-  // causing hitbox offset. We intercept events on a transparent overlay and dispatch
-  // synthetic events with scaled coordinates to fix the mismatch.
+  // DPR hitbox fix: Spline renders canvas at 2x DPR but raycasts with raw client coords,
+  // causing pointer offset. Overlay intercepts events and forwards with scaled coordinates.
+  // Created via DOM API to bypass React/Suspense hydration issues.
   useEffect(() => {
     if (!splineApp) return;
-    const overlay = overlayRef.current;
-    const canvas = (splineApp as unknown as { _canvas?: HTMLCanvasElement })._canvas
-      ?? document.querySelector('canvas');
-    if (!overlay || !canvas) return;
 
-    const appAny = splineApp as unknown as { setGlobalEvents?: (v: boolean) => void };
-    appAny.setGlobalEvents?.(false);
-    canvas.style.pointerEvents = 'none';
+    let cancelled = false;
+    const setupOverlay = () => {
+      if (cancelled) return;
 
-    const forwardPointer = (e: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
+      const appAny = splineApp as unknown as Record<string, unknown>;
+      const maybeCanvas = (appAny._canvas ?? appAny.canvas) as HTMLCanvasElement | undefined;
+      const canvas =
+        (maybeCanvas instanceof HTMLCanvasElement ? maybeCanvas : undefined) ??
+        Array.from(document.querySelectorAll("canvas")).find(
+          (c) => c.width > c.clientWidth * 1.5
+        );
+      if (!canvas) return null;
 
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const localX = e.clientX - rect.left;
-      const localY = e.clientY - rect.top;
+      const dprRatio = canvas.width / canvas.clientWidth;
+      if (dprRatio < 1.2) return null;
 
-      const syntheticEvent = new PointerEvent(e.type, {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        pointerId: e.pointerId,
-        pointerType: e.pointerType,
-        isPrimary: e.isPrimary,
-        buttons: e.buttons,
-        button: e.button,
-        clientX: rect.left + localX * scaleX,
-        clientY: rect.top + localY * scaleY,
-      });
-      canvas.dispatchEvent(syntheticEvent);
+      if (typeof appAny.setGlobalEvents === "function") {
+        (appAny.setGlobalEvents as (v: boolean) => void)(false);
+      }
+      canvas.style.pointerEvents = "none";
+
+      const overlay = document.createElement("div");
+      overlay.id = "spline-pointer-overlay";
+      overlay.style.cssText =
+        "position:fixed;inset:0;z-index:1;cursor:default;";
+      document.body.appendChild(overlay);
+
+      const forwardPointer = (e: PointerEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const localX = e.clientX - rect.left;
+        const localY = e.clientY - rect.top;
+
+        const syntheticEvent = new PointerEvent(e.type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: e.pointerId,
+          pointerType: e.pointerType,
+          isPrimary: e.isPrimary,
+          buttons: e.buttons,
+          button: e.button,
+          clientX: rect.left + localX * scaleX,
+          clientY: rect.top + localY * scaleY,
+        });
+        canvas.dispatchEvent(syntheticEvent);
+      };
+
+      const pointerEvents = [
+        "pointermove",
+        "pointerdown",
+        "pointerup",
+        "pointercancel",
+      ] as const;
+      pointerEvents.forEach((ev) =>
+        overlay.addEventListener(ev, forwardPointer as EventListener, {
+          passive: true,
+        })
+      );
+
+      return { overlay, canvas, pointerEvents, forwardPointer };
     };
 
-    const pointerEvents = ['pointermove', 'pointerdown', 'pointerup', 'pointercancel'] as const;
-    pointerEvents.forEach(ev =>
-      overlay.addEventListener(ev, forwardPointer as EventListener, { passive: true })
-    );
+    let result = setupOverlay();
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    if (!result) {
+      retryTimer = setTimeout(() => {
+        result = setupOverlay();
+      }, 2000);
+    }
 
     return () => {
-      pointerEvents.forEach(ev =>
-        overlay.removeEventListener(ev, forwardPointer as EventListener)
-      );
-      canvas.style.pointerEvents = '';
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (result) {
+        result.pointerEvents.forEach((ev) =>
+          result!.overlay.removeEventListener(
+            ev,
+            result!.forwardPointer as EventListener
+          )
+        );
+        result.canvas.style.pointerEvents = "";
+        result.overlay.remove();
+      }
     };
   }, [splineApp]);
 
@@ -504,7 +547,6 @@ const AnimatedBackground = () => {
           scene="/assets/skills-keyboard.spline"
         />
       </Suspense>
-      <div ref={overlayRef} className="fixed inset-0 z-[1]" />
 
       <AnimatePresence>
         {selectedSkill && activeSection === "skills" && (
