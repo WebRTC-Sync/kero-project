@@ -511,9 +511,7 @@ const AnimatedBackground = () => {
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
               }
             } catch (_) { /* noop */ }
-            setTimeout(() => {
-              applyBrandColors(app);
-            }, 1000);
+            console.log('[keycap colors] pre-baked in .spline materials');
           }}
           scene="/assets/skills-keyboard.spline"
         />
