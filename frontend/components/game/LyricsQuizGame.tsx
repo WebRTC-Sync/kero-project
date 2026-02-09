@@ -1,5 +1,12 @@
 "use client";
 
+declare global {
+  interface Window {
+    YT?: { Player: new (...args: unknown[]) => unknown };
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
@@ -91,6 +98,8 @@ export default function LyricsQuizGame({
    const hasProcessedRevealRef = useRef(false);
    const streakRef = useRef(streak);
    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const ytPlayerRef = useRef<any>(null);
+    const ytApiReady = useRef(false);
    const questionIndexRef = useRef(currentQuestionIndex);
    const advanceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
    const roundResultsRef = useRef(roundResults);
@@ -120,7 +129,30 @@ export default function LyricsQuizGame({
      } catch {
        setLocalIdentity({ id: "", name: "" });
      }
-   }, []);
+    }, []);
+
+    useEffect(() => {
+      if (typeof window === "undefined") return;
+      const w = window as any;
+      if (w.YT && w.YT.Player) {
+        ytApiReady.current = true;
+        return;
+      }
+      const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+      if (existingScript) {
+        const check = setInterval(() => {
+          if (w.YT && w.YT.Player) {
+            ytApiReady.current = true;
+            clearInterval(check);
+          }
+        }, 100);
+        return () => clearInterval(check);
+      }
+      w.onYouTubeIframeAPIReady = () => { ytApiReady.current = true; };
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(tag);
+    }, []);
 
     const cleanDisplay = (s: string) => s?.replace(/\s*[\(（\[【].*?[\)）\]】]/g, '').replace(/[\(（\[【\)）\]】]/g, '').trim() || '';
 
@@ -181,6 +213,10 @@ export default function LyricsQuizGame({
         audioRef.current.pause();
         audioRef.current = null;
       }
+      if (ytPlayerRef.current) {
+        try { ytPlayerRef.current.destroy(); } catch {}
+        ytPlayerRef.current = null;
+      }
       setAudioLoading(false);
       return;
     }
@@ -207,23 +243,87 @@ export default function LyricsQuizGame({
         audioRef.current.pause();
         audioRef.current = null;
       }
+      if (ytPlayerRef.current) {
+        try { ytPlayerRef.current.destroy(); } catch {}
+        ytPlayerRef.current = null;
+      }
       setAudioLoading(true);
-      const audio = new Audio(`/api/songs/audio-stream?videoId=${ytVideoId}`);
-      audioRef.current = audio;
-      audio.volume = 0.5;
-      audio.addEventListener("canplay", () => {
-        setAudioLoading(false);
-        audio.play().catch(() => setAudioPlayFailed(true));
-      });
-      audio.addEventListener("error", () => {
-        setAudioLoading(false);
-      });
-      audio.load();
+
+      const createPlayer = () => {
+        let containerEl = document.getElementById("yt-audio-player-container");
+        if (!containerEl) {
+          containerEl = document.createElement("div");
+          containerEl.id = "yt-audio-player-container";
+          containerEl.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;";
+          document.body.appendChild(containerEl);
+        }
+        const playerDiv = document.createElement("div");
+        playerDiv.id = `yt-player-${Date.now()}`;
+        containerEl.innerHTML = "";
+        containerEl.appendChild(playerDiv);
+
+        ytPlayerRef.current = new (window as any).YT.Player(playerDiv.id, {
+          videoId: ytVideoId,
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            playsinline: 1,
+            enablejsapi: 1,
+            fs: 0,
+            disablekb: 1,
+            rel: 0,
+            modestbranding: 1,
+          },
+          events: {
+            onReady: (event: any) => {
+              event.target.setVolume(50);
+              event.target.playVideo();
+              setAudioLoading(false);
+            },
+            onStateChange: (event: any) => {
+              if (event.data === 1) {
+                setAudioLoading(false);
+                setAudioPlayFailed(false);
+              }
+            },
+            onError: () => {
+              setAudioLoading(false);
+              setAudioPlayFailed(true);
+            },
+          },
+        });
+      };
+
+      if (ytApiReady.current && (window as any).YT?.Player) {
+        createPlayer();
+      } else {
+        const waitForApi = setInterval(() => {
+          if ((window as any).YT?.Player) {
+            ytApiReady.current = true;
+            clearInterval(waitForApi);
+            createPlayer();
+          }
+        }, 200);
+        const timeout = setTimeout(() => {
+          clearInterval(waitForApi);
+          setAudioLoading(false);
+          setAudioPlayFailed(true);
+        }, 10000);
+        return () => {
+          clearInterval(waitForApi);
+          clearTimeout(timeout);
+          if (ytPlayerRef.current) {
+            try { ytPlayerRef.current.destroy(); } catch {}
+            ytPlayerRef.current = null;
+          }
+        };
+      }
       
       return () => {
-        audio.pause();
-        audio.src = '';
-        audioRef.current = null;
+        if (ytPlayerRef.current) {
+          try { ytPlayerRef.current.destroy(); } catch {}
+          ytPlayerRef.current = null;
+        }
         setAudioLoading(false);
       };
     } else {
@@ -841,9 +941,10 @@ export default function LyricsQuizGame({
     <div className="fixed inset-0 bg-gradient-to-br from-[#46178F] to-[#1D0939] font-sans flex flex-col">
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none"></div>
 
-      <div className="relative z-10 flex-1 flex flex-col p-3 min-w-0 min-h-0">
+       <div className="relative z-10 flex-1 flex flex-col lg:flex-row p-3 min-w-0 min-h-0 gap-3">
+        <div className="flex flex-col flex-1 min-w-0 min-h-0">
         <div className="flex items-center py-2 px-1 sm:px-5 border-b border-white/10 gap-2 shrink-0">
-          <div className="flex items-center gap-1.5 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 w-full">
             {onBack && (
               <button
                 onClick={onBack}
@@ -898,29 +999,18 @@ export default function LyricsQuizGame({
               </motion.div>
             )}
 
-            {!cameraElement && (
-              <div className="flex items-center gap-2 sm:gap-3 ml-auto">
-                <div className="flex flex-col items-end">
-                  <span className="text-xs sm:text-sm font-bold text-white/60 uppercase tracking-widest">Score</span>
-                  <span className="text-xl sm:text-2xl font-black text-white">{localScore.toLocaleString()}</span>
-                </div>
-                <TimerCircle timeLeft={timeLeft} timeLimit={currentQuestion.timeLimit || 20} />
+            <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+              <div className="flex flex-col items-end">
+                <span className="text-xs sm:text-sm font-bold text-white/60 uppercase tracking-widest">Score</span>
+                <span className="text-xl sm:text-2xl font-black text-white">{localScore.toLocaleString()}</span>
               </div>
-            )}
+              <TimerCircle timeLeft={timeLeft} timeLimit={currentQuestion.timeLimit || 20} />
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-1 min-h-0 flex-col gap-4 pt-2 sm:gap-6 lg:flex-row" data-testid="quiz-layout-shell">
+        <div className="flex flex-1 min-h-0 flex-col gap-4 pt-2 sm:gap-6" data-testid="quiz-layout-shell">
           <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-6" data-testid="quiz-main-content">
-            {cameraElement && (
-              <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-white/10 border border-white/10 shrink-0">
-                <div className="flex flex-col">
-                  <span className="text-[10px] sm:text-xs font-bold text-white/60 uppercase tracking-widest">Score</span>
-                  <span className="text-lg sm:text-2xl font-black text-white">{localScore.toLocaleString()}</span>
-                </div>
-                <TimerCircle timeLeft={timeLeft} timeLimit={currentQuestion.timeLimit || 20} />
-              </div>
-            )}
 
             <div className="w-full min-h-[170px] sm:min-h-[220px] bg-white rounded-2xl shadow-2xl flex flex-col items-center justify-center p-4 sm:p-8 text-center relative overflow-hidden group">
               <div className="absolute top-0 left-0 w-full h-2 bg-[#46178F]"></div>
@@ -950,7 +1040,12 @@ export default function LyricsQuizGame({
                   {audioPlayFailed && (
                     <button
                       onClick={() => {
-                        audioRef.current?.play().then(() => setAudioPlayFailed(false)).catch(() => {});
+                        if (ytPlayerRef.current && typeof ytPlayerRef.current.playVideo === 'function') {
+                          ytPlayerRef.current.playVideo();
+                          setAudioPlayFailed(false);
+                        } else if (audioRef.current) {
+                          audioRef.current.play().then(() => setAudioPlayFailed(false)).catch(() => {});
+                        }
                       }}
                       className="mt-2 px-6 py-2 bg-[#46178F] hover:bg-[#46178F]/80 text-white font-bold rounded-full text-sm sm:text-base transition-colors"
                     >
@@ -984,13 +1079,14 @@ export default function LyricsQuizGame({
 
             <div className="flex-1 w-full relative min-h-0">{renderQuestionContent()}</div>
           </div>
+        </div>
+        </div>
           {cameraElement && (
             <aside className="h-[200px] w-full shrink-0 lg:h-full lg:w-[320px] xl:w-[360px] rounded-2xl overflow-hidden border border-white/20 bg-black shadow-2xl" data-testid="quiz-camera-panel">
               <div className="h-full w-full [&_video]:object-cover [&_video]:w-full [&_video]:h-full [&>div]:h-full [&>div]:w-full [&>div>div]:h-full [&>div>div]:w-full [&>div>div>div]:h-full [&>div>div>div]:w-full">{cameraElement}</div>
             </aside>
           )}
-        </div>
-      </div>
+       </div>
 
       <AnimatePresence>
         {showResults && (

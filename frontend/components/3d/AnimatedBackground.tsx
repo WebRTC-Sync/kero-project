@@ -309,99 +309,86 @@ const AnimatedBackground = () => {
 
   // --- Effects ---
 
-  // DPR hitbox fix: Spline renders canvas at 2x DPR but raycasts with raw client coords,
-  // causing pointer offset. Overlay intercepts events and forwards with scaled coordinates.
-  // Created via DOM API to bypass React/Suspense hydration issues.
+  // DPR hitbox fix: Spline renders canvas at 2x DPR but raycasts with raw client coords.
+  // Intercept pointer events on the canvas wrapper in capture phase, stop originals,
+  // and re-dispatch with DPR-scaled coordinates so Spline's raycast hits correctly.
   useEffect(() => {
     if (!splineApp) return;
 
-    let cancelled = false;
-    const setupOverlay = () => {
-      if (cancelled) return;
+    let cleanupFn: (() => void) | undefined;
 
-      const appAny = splineApp as unknown as Record<string, unknown>;
-      const maybeCanvas = (appAny._canvas ?? appAny.canvas) as HTMLCanvasElement | undefined;
-      const canvas =
-        (maybeCanvas instanceof HTMLCanvasElement ? maybeCanvas : undefined) ??
-        Array.from(document.querySelectorAll("canvas")).find(
-          (c) => c.width > c.clientWidth * 1.5
-        );
-      if (!canvas) return null;
+    const setup = () => {
+      const canvas = document.querySelector(
+        ".w-full.h-full.fixed.inset-0.z-0 canvas"
+      ) as HTMLCanvasElement | null;
+      if (!canvas) return;
 
       const dprRatio = canvas.width / canvas.clientWidth;
-      if (dprRatio < 1.2) return null;
+      if (dprRatio < 1.2) return;
 
-      if (typeof appAny.setGlobalEvents === "function") {
-        (appAny.setGlobalEvents as (v: boolean) => void)(false);
-      }
-      canvas.style.pointerEvents = "none";
+      const wrapper = canvas.parentElement;
+      if (!wrapper) return;
 
-      const overlay = document.createElement("div");
-      overlay.id = "spline-pointer-overlay";
-      overlay.style.cssText =
-        "position:fixed;inset:0;z-index:1;cursor:default;";
-      document.body.appendChild(overlay);
+      const CORRECTED_KEY = "__dprCorrected";
 
-      const forwardPointer = (e: PointerEvent) => {
+      const interceptPointer = (e: Event) => {
+        const pe = e as PointerEvent;
+        if ((pe as unknown as Record<string, unknown>)[CORRECTED_KEY]) return;
+        if (pe.target !== canvas) return;
+
+        e.stopPropagation();
+
         const rect = canvas.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
 
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
-        const localX = e.clientX - rect.left;
-        const localY = e.clientY - rect.top;
+        const localX = pe.clientX - rect.left;
+        const localY = pe.clientY - rect.top;
 
-        const syntheticEvent = new PointerEvent(e.type, {
+        const corrected = new PointerEvent(pe.type, {
           bubbles: true,
           cancelable: true,
           composed: true,
-          pointerId: e.pointerId,
-          pointerType: e.pointerType,
-          isPrimary: e.isPrimary,
-          buttons: e.buttons,
-          button: e.button,
+          pointerId: pe.pointerId,
+          pointerType: pe.pointerType,
+          isPrimary: pe.isPrimary,
+          buttons: pe.buttons,
+          button: pe.button,
           clientX: rect.left + localX * scaleX,
           clientY: rect.top + localY * scaleY,
         });
-        canvas.dispatchEvent(syntheticEvent);
+        Object.defineProperty(corrected, CORRECTED_KEY, { value: true });
+        canvas.dispatchEvent(corrected);
       };
 
-      const pointerEvents = [
+      const events = [
         "pointermove",
         "pointerdown",
         "pointerup",
         "pointercancel",
+        "mousemove",
+        "mousedown",
+        "mouseup",
       ] as const;
-      pointerEvents.forEach((ev) =>
-        overlay.addEventListener(ev, forwardPointer as EventListener, {
-          passive: true,
-        })
+
+      events.forEach((ev) =>
+        wrapper.addEventListener(ev, interceptPointer, { capture: true })
       );
 
-      return { overlay, canvas, pointerEvents, forwardPointer };
+      cleanupFn = () => {
+        events.forEach((ev) =>
+          wrapper.removeEventListener(ev, interceptPointer, { capture: true })
+        );
+      };
     };
 
-    let result = setupOverlay();
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    if (!result) {
-      retryTimer = setTimeout(() => {
-        result = setupOverlay();
-      }, 2000);
-    }
+    setup();
+    const retryTimer = setTimeout(setup, 2000);
 
     return () => {
-      cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      if (result) {
-        result.pointerEvents.forEach((ev) =>
-          result!.overlay.removeEventListener(
-            ev,
-            result!.forwardPointer as EventListener
-          )
-        );
-        result.canvas.style.pointerEvents = "";
-        result.overlay.remove();
-      }
+      clearTimeout(retryTimer);
+      cleanupFn?.();
     };
   }, [splineApp]);
 

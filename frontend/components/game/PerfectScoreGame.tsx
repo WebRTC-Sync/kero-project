@@ -209,6 +209,7 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
   const [snapNoteLabel, setSnapNoteLabel] = useState("");
   const [currentJudgment, setCurrentJudgment] = useState<JudgmentLabel>("BAD");
   const [turnScores, setTurnScores] = useState<Record<string, number>>({});
+  const [showPassModal, setShowPassModal] = useState(false);
 
   const lyrics: LyricsLine[] = currentSong?.lyrics || [];
   const audioUrl = currentSong?.instrumentalUrl || currentSong?.audioUrl;
@@ -217,7 +218,7 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
   const gamePhase: GamePhase = useMemo(() => {
     if (lyrics.length === 0) return "intro";
     const firstLyricStart = lyrics[0].startTime;
-    const countdownStart = Math.max(0, firstLyricStart - 4);
+    const countdownStart = Math.max(0, firstLyricStart - 3);
     const countdownEnd = firstLyricStart;
     if (localTime < countdownStart) return "intro";
     if (localTime < countdownEnd) return "countdown";
@@ -226,7 +227,7 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
 
   const countdownNumber = useMemo(() => {
     if (gamePhase !== "countdown" || lyrics.length === 0) return 0;
-    const remaining = Math.ceil(lyrics[0].startTime - localTime);
+    const remaining = Math.floor(lyrics[0].startTime - localTime) + 1;
     return Math.max(0, Math.min(3, remaining));
   }, [gamePhase, localTime, lyrics]);
 
@@ -585,6 +586,15 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
     singerScoreSnapshotRef.current[String(currentSingerId)] = Math.round(scoreRef.current);
     setTurnScores({ ...singerScoreSnapshotRef.current });
     getSocket().emit("perfect:pass-turn", { roomCode });
+    setShowPassModal(false);
+  }, [currentSingerId, isMyTurn, roomCode]);
+
+  const passToParticipant = useCallback((targetId: string | number) => {
+    if (!roomCode || !isMyTurn) return;
+    singerScoreSnapshotRef.current[String(currentSingerId)] = Math.round(scoreRef.current);
+    setTurnScores({ ...singerScoreSnapshotRef.current });
+    getSocket().emit("perfect:pass-turn", { roomCode, targetId: String(targetId) });
+    setShowPassModal(false);
   }, [currentSingerId, isMyTurn, roomCode]);
 
   const autoCorrelate = (buffer: Float32Array, sampleRate: number): number => {
@@ -1291,7 +1301,7 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.4 } }}
-            className="absolute inset-0 z-30 flex flex-col items-center justify-center"
+            className="absolute inset-0 z-30 flex flex-col items-center justify-center pb-[8%]"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.94, y: 12 }}
@@ -1349,7 +1359,7 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.2 } }}
+            exit={{ opacity: 0, transition: { duration: 0.15 } }}
             className="absolute inset-0 z-30 flex items-center justify-center"
           >
             <AnimatePresence mode="wait">
@@ -1358,7 +1368,7 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
                 initial={{ scale: 2, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.55, opacity: 0 }}
-                transition={{ duration: 0.42, type: "spring", damping: 15 }}
+                transition={{ duration: 0.3, type: "spring", damping: 18 }}
                 className="tabular-nums text-8xl font-black text-white sm:text-[150px]"
                 style={{ textShadow: "0 0 70px rgba(6,182,212,0.45), 0 4px 22px rgba(0,0,0,0.55)" }}
               >
@@ -1418,10 +1428,12 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
               </div>
 
               {!isMyTurn && (
-                <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0a0a1a]/55 backdrop-blur-sm">
-                  <div className="rounded-2xl border border-white/20 bg-white/[0.08] px-6 py-4 text-center shadow-2xl">
-                    <p className="text-xs uppercase tracking-[0.3em] text-white/60">Turn Locked</p>
-                    <p className="mt-1 text-lg font-semibold text-white">Waiting for {currentSingerNickname || "next singer"} to sing...</p>
+                <div className="pointer-events-none absolute bottom-3 left-3 z-20">
+                  <div className="rounded-lg border border-white/15 bg-black/50 px-3 py-1.5 backdrop-blur-sm">
+                    <p className="text-[10px] font-medium text-white/70">
+                      <span className="uppercase tracking-[0.2em] text-white/50">Now: </span>
+                      {currentSingerNickname || "next singer"}
+                    </p>
                   </div>
                 </div>
               )}
@@ -1483,7 +1495,12 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
 
             {/* Integrated control bar (no lyrics overlap) */}
             <div className="flex flex-wrap items-center gap-2 border-x border-white/15 bg-white/[0.03] px-4 py-2 backdrop-blur-lg sm:gap-3">
-              <button disabled className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/40">
+              <button
+                onClick={togglePlay}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20 transition-colors"
+                type="button"
+                title={isPlaying ? "Pause" : "Play"}
+              >
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               </button>
 
@@ -1566,12 +1583,22 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
                 </button>
 
                 <button
-                  onClick={passTurn}
+                  onClick={() => setShowPassModal(true)}
                   disabled={!isMyTurn}
                   className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.24em] ${isMyTurn ? "bg-[#f0c040] text-[#101018]" : "bg-white/10 text-white/45"}`}
                   type="button"
                 >
                   패스
+                </button>
+
+                <button
+                  onClick={() => window.dispatchEvent(new Event("kero:openAddSong"))}
+                  className="relative flex items-center gap-2 rounded-full border border-[#f0c040]/40 bg-[#f0c040]/12 px-3 py-2 text-xs font-semibold text-[#f0c040] hover:bg-[#f0c040]/20"
+                  type="button"
+                  title="곡 예약"
+                >
+                  <Music2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">곡 예약</span>
                 </button>
 
                 <button
@@ -1675,6 +1702,58 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
           })}
         </div>
       </div>
+
+      {/* Pass Turn Modal */}
+      <AnimatePresence>
+        {showPassModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowPassModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ type: "spring", damping: 22, stiffness: 300 }}
+              className="w-full max-w-sm rounded-2xl border border-white/15 bg-[#141824] p-5 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-4 text-center text-sm font-bold uppercase tracking-[0.3em] text-white/70">패스 대상 선택</p>
+              <div className="space-y-2">
+                {participants
+                  .filter((p) => String(p.id) !== String(currentSingerId))
+                  .map((participant) => (
+                    <button
+                      key={String(participant.id)}
+                      onClick={() => passToParticipant(participant.id)}
+                      className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left transition-colors hover:border-[#f0c040]/40 hover:bg-[#f0c040]/10"
+                    >
+                      <span className="text-sm font-medium text-white">{participant.nickname}</span>
+                      <ChevronRight className="h-4 w-4 text-white/40" />
+                    </button>
+                  ))}
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={passTurn}
+                  className="flex-1 rounded-xl border border-[#f0c040]/30 bg-[#f0c040]/15 py-2.5 text-xs font-bold uppercase tracking-[0.2em] text-[#f0c040] hover:bg-[#f0c040]/25"
+                >
+                  자동 패스
+                </button>
+                <button
+                  onClick={() => setShowPassModal(false)}
+                  className="flex-1 rounded-xl border border-white/15 bg-white/[0.06] py-2.5 text-xs font-bold uppercase tracking-[0.2em] text-white/60 hover:bg-white/10"
+                >
+                  취소
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {status === "finished" && score >= 0 && (
