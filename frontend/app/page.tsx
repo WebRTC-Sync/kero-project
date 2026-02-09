@@ -31,14 +31,12 @@ export default function Home() {
           <section id="hero">
             <HeroSection />
           </section>
-           <section id="keyboard-intro" className="relative h-screen">
-             <div className="absolute bottom-0 left-0 right-0">
+           <section id="keyboard-intro" className="relative h-screen flex items-end pb-[15vh]">
+             <div className="w-full">
                <TeamMarquee />
              </div>
            </section>
-           <div className="mt-24 md:mt-32">
-             <SkillsSection />
-           </div>
+           <SkillsSection />
           <ArchitectureSection />
           <FeaturesSection />
           <HighlightCTA />

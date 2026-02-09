@@ -8,7 +8,7 @@ export default function TeamMarquee() {
   return (
     <section
       id="team"
-      className="w-full py-12 sm:py-16 md:py-24 mb-32 md:mb-48 overflow-hidden"
+      className="w-full py-8 sm:py-12 md:py-16 overflow-hidden"
     >
       <div className="relative z-10 flex flex-col items-center gap-8">
         <h2 className="font-display text-4xl md:text-7xl font-bold text-center text-white">MEET THE TEAM</h2>
