@@ -4,12 +4,12 @@ export const STATES = {
   hero: {
     desktop: {
       scale: { x: 0.14, y: 0.14, z: 0.14 },
-      position: { x: 475, y: -100, z: 0 },
+      position: { x: 350, y: -100, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
     },
     mobile: {
-      scale: { x: 0.20, y: 0.20, z: 0.20 },
-      position: { x: 200, y: -200, z: 0 },
+      scale: { x: 0.18, y: 0.18, z: 0.18 },
+      position: { x: 100, y: -200, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
     },
   },
@@ -51,13 +51,13 @@ export const STATES = {
   },
   features: {
     desktop: {
-      scale: { x: 0.16, y: 0.16, z: 0.16 },
-      position: { x: 420, y: -40, z: 0 },
+      scale: { x: 0.15, y: 0.15, z: 0.15 },
+      position: { x: 0, y: -40, z: 0 },
       rotation: { x: Math.PI, y: Math.PI / 3, z: Math.PI },
     },
     mobile: {
       scale: { x: 0.20, y: 0.20, z: 0.20 },
-      position: { x: 210, y: 150, z: 0 },
+      position: { x: 0, y: 150, z: 0 },
       rotation: { x: Math.PI, y: Math.PI / 3, z: Math.PI },
     },
   },
@@ -69,7 +69,7 @@ export const STATES = {
     },
     mobile: {
       scale: { x: 0.18, y: 0.18, z: 0.18 },
-      position: { x: 200, y: 150, z: 0 },
+      position: { x: 0, y: 150, z: 0 },
       rotation: { x: Math.PI, y: Math.PI / 3, z: Math.PI },
     },
   },
@@ -81,7 +81,7 @@ export const STATES = {
     },
     mobile: {
       scale: { x: 0.14, y: 0.14, z: 0.14 },
-      position: { x: 200, y: 150, z: 0 },
+      position: { x: 0, y: 150, z: 0 },
       rotation: { x: Math.PI, y: Math.PI / 3, z: Math.PI },
     },
   },
