@@ -3,84 +3,84 @@ export type Section = "hero" | "team" | "skills" | "architecture" | "features" |
 export const STATES = {
   hero: {
     desktop: {
-      scale: { x: 0.20, y: 0.20, z: 0.20 },
+      scale: { x: 0.40, y: 0.40, z: 0.40 },
       position: { x: 225, y: -100, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
     },
     mobile: {
-      scale: { x: 0.30, y: 0.30, z: 0.30 },
+      scale: { x: 0.60, y: 0.60, z: 0.60 },
       position: { x: 0, y: -200, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
     },
   },
   team: {
     desktop: {
-      scale: { x: 0.25, y: 0.25, z: 0.25 },
-      position: { x: 0, y: -40, z: 0 },
+      scale: { x: 0.50, y: 0.50, z: 0.50 },
+      position: { x: 150, y: -40, z: 0 },
       rotation: { x: 0, y: Math.PI / 12, z: 0 },
     },
     mobile: {
-      scale: { x: 0.30, y: 0.30, z: 0.30 },
+      scale: { x: 0.60, y: 0.60, z: 0.60 },
       position: { x: 0, y: -40, z: 0 },
       rotation: { x: 0, y: Math.PI / 6, z: 0 },
     },
   },
   skills: {
     desktop: {
-      scale: { x: 0.25, y: 0.25, z: 0.25 },
-      position: { x: 0, y: -40, z: 0 },
+      scale: { x: 0.50, y: 0.50, z: 0.50 },
+      position: { x: -300, y: -40, z: 0 },
       rotation: { x: 0, y: Math.PI / 12, z: 0 },
     },
     mobile: {
-      scale: { x: 0.30, y: 0.30, z: 0.30 },
+      scale: { x: 0.60, y: 0.60, z: 0.60 },
       position: { x: 0, y: -40, z: 0 },
       rotation: { x: 0, y: Math.PI / 6, z: 0 },
     },
   },
   architecture: {
     desktop: {
-      scale: { x: 0.25, y: 0.25, z: 0.25 },
-      position: { x: 0, y: -40, z: 0 },
+      scale: { x: 0.50, y: 0.50, z: 0.50 },
+      position: { x: 150, y: -40, z: 0 },
       rotation: { x: Math.PI / 12, y: -Math.PI / 4, z: 0 },
     },
     mobile: {
-      scale: { x: 0.30, y: 0.30, z: 0.30 },
+      scale: { x: 0.60, y: 0.60, z: 0.60 },
       position: { x: 0, y: -40, z: 0 },
       rotation: { x: Math.PI / 6, y: -Math.PI / 6, z: 0 },
     },
   },
   features: {
     desktop: {
-      scale: { x: 0.25, y: 0.25, z: 0.25 },
-      position: { x: 0, y: -40, z: 0 },
+      scale: { x: 0.50, y: 0.50, z: 0.50 },
+      position: { x: 150, y: -40, z: 0 },
       rotation: { x: Math.PI, y: Math.PI / 3, z: Math.PI },
     },
     mobile: {
-      scale: { x: 0.30, y: 0.30, z: 0.30 },
+      scale: { x: 0.60, y: 0.60, z: 0.60 },
       position: { x: 0, y: 150, z: 0 },
       rotation: { x: Math.PI, y: Math.PI / 3, z: Math.PI },
     },
   },
   cta: {
     desktop: {
-      scale: { x: 0.20, y: 0.20, z: 0.20 },
+      scale: { x: 0.40, y: 0.40, z: 0.40 },
       position: { x: 350, y: -250, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
     },
     mobile: {
-      scale: { x: 0.25, y: 0.25, z: 0.25 },
+      scale: { x: 0.50, y: 0.50, z: 0.50 },
       position: { x: 0, y: 150, z: 0 },
       rotation: { x: Math.PI, y: Math.PI / 3, z: Math.PI },
     },
   },
   faq: {
     desktop: {
-      scale: { x: 0.20, y: 0.20, z: 0.20 },
+      scale: { x: 0.40, y: 0.40, z: 0.40 },
       position: { x: 350, y: -250, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
     },
     mobile: {
-      scale: { x: 0.25, y: 0.25, z: 0.25 },
+      scale: { x: 0.50, y: 0.50, z: 0.50 },
       position: { x: 0, y: 150, z: 0 },
       rotation: { x: Math.PI, y: Math.PI / 3, z: Math.PI },
     },
@@ -106,7 +106,7 @@ export const getKeyboardState = ({
       : width / DESKTOP_REF_WIDTH;
 
     const minScale = isMobile ? 0.5 : 0.5;
-    const maxScale = isMobile ? 0.6 : 1.0;
+    const maxScale = isMobile ? 0.6 : 1.15;
 
     return Math.min(Math.max(targetScale, minScale), maxScale);
   };

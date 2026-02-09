@@ -1,5 +1,7 @@
 "use client";
 
+// Animated Spline background controller
+
 import React, { Suspense, useEffect, useState } from "react";
 import { Application, SPEObject, SplineEvent } from "@splinetool/runtime";
 import gsap from "gsap";
@@ -17,6 +19,7 @@ import { Section, getKeyboardState } from "./animated-background-config";
 
 gsap.registerPlugin(ScrollTrigger);
 
+// Helper: traverse parent chain to find a matching skill
 const findSkillFromObject = (obj: { name: string; id: string } | null): Skill | null => {
   let current: any = obj;
   while (current) {
@@ -25,6 +28,60 @@ const findSkillFromObject = (obj: { name: string; id: string } | null): Skill | 
     current = current.parent || null;
   }
   return null;
+};
+
+/*
+ * getAllObjects() returns a flat list ordered by scene hierarchy.
+ * We build a map of skill positions, then for each skill look forward
+ * (and backward as fallback) for the nearest keycap-desktop to color.
+ */
+const applyBrandColors = async (app: Application) => {
+  try {
+    const allObjects = app.getAllObjects();
+    let applied = 0;
+    const colored = new Set<number>();
+
+    // Build skill position map
+    const skillEntries: { skill: typeof SKILLS[SkillNames]; idx: number }[] = [];
+    allObjects.forEach((obj, idx) => {
+      const skill = SKILLS[obj.name as SkillNames];
+      if (skill) skillEntries.push({ skill, idx });
+    });
+
+    const applyColor = (obj: any, skill: typeof SKILLS[SkillNames], objIdx: number) => {
+      if (colored.has(objIdx)) return false;
+      try { obj.color = skill.color; } catch (_) {}
+      try { if (obj.material) obj.material.alpha = 1; } catch (_) {}
+      colored.add(objIdx);
+      applied++;
+      return true;
+    };
+
+    for (const { skill, idx } of skillEntries) {
+      let found = false;
+      // Look forward for nearest keycap-desktop
+      for (let i = idx + 1; i < allObjects.length; i++) {
+        if (SKILLS[allObjects[i].name as SkillNames]) break;
+        if (allObjects[i].name === 'keycap-desktop') {
+          found = applyColor(allObjects[i], skill, i);
+          break;
+        }
+      }
+      // Fallback: look backward
+      if (!found) {
+        for (let i = idx - 1; i >= 0; i--) {
+          if (SKILLS[allObjects[i].name as SkillNames]) break;
+          if (allObjects[i].name === 'keycap-desktop') {
+            found = applyColor(allObjects[i], skill, i);
+            break;
+          }
+        }
+      }
+    }
+    console.log(`[applyBrandColors] Applied to ${applied} keycaps`);
+  } catch (e) {
+    console.error('[applyBrandColors] FATAL:', e);
+  }
 };
 
 const AnimatedBackground = () => {
@@ -309,89 +366,6 @@ const AnimatedBackground = () => {
 
   // --- Effects ---
 
-  // DPR hitbox fix: Spline renders canvas at 2x DPR but raycasts with raw client coords.
-  // Intercept pointer events on the canvas wrapper in capture phase, stop originals,
-  // and re-dispatch with DPR-scaled coordinates so Spline's raycast hits correctly.
-  useEffect(() => {
-    if (!splineApp) return;
-
-    let cleanupFn: (() => void) | undefined;
-
-    const setup = () => {
-      const canvas = document.querySelector(
-        ".w-full.h-full.fixed.inset-0.z-0 canvas"
-      ) as HTMLCanvasElement | null;
-      if (!canvas) return;
-
-      const dprRatio = canvas.width / canvas.clientWidth;
-      if (dprRatio < 1.2) return;
-
-      const wrapper = canvas.parentElement;
-      if (!wrapper) return;
-
-      const CORRECTED_KEY = "__dprCorrected";
-
-      const interceptPointer = (e: Event) => {
-        const pe = e as PointerEvent;
-        if ((pe as unknown as Record<string, unknown>)[CORRECTED_KEY]) return;
-        if (pe.target !== canvas) return;
-
-        e.stopPropagation();
-
-        const rect = canvas.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return;
-
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        const localX = pe.clientX - rect.left;
-        const localY = pe.clientY - rect.top;
-
-        const corrected = new PointerEvent(pe.type, {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          pointerId: pe.pointerId,
-          pointerType: pe.pointerType,
-          isPrimary: pe.isPrimary,
-          buttons: pe.buttons,
-          button: pe.button,
-          clientX: rect.left + localX * scaleX,
-          clientY: rect.top + localY * scaleY,
-        });
-        Object.defineProperty(corrected, CORRECTED_KEY, { value: true });
-        canvas.dispatchEvent(corrected);
-      };
-
-      const events = [
-        "pointermove",
-        "pointerdown",
-        "pointerup",
-        "pointercancel",
-        "mousemove",
-        "mousedown",
-        "mouseup",
-      ] as const;
-
-      events.forEach((ev) =>
-        wrapper.addEventListener(ev, interceptPointer, { capture: true })
-      );
-
-      cleanupFn = () => {
-        events.forEach((ev) =>
-          wrapper.removeEventListener(ev, interceptPointer, { capture: true })
-        );
-      };
-    };
-
-    setup();
-    const retryTimer = setTimeout(setup, 2000);
-
-    return () => {
-      clearTimeout(retryTimer);
-      cleanupFn?.();
-    };
-  }, [splineApp]);
-
   useEffect(() => {
     if (!splineApp) return;
     handleSplineInteractions();
@@ -530,6 +504,14 @@ const AnimatedBackground = () => {
           onLoad={(app: Application) => {
             setSplineApp(app);
             bypassLoading();
+            try {
+              const renderer = (app as unknown as { _renderer?: { setPixelRatio: (r: number) => void } })._renderer;
+              if (renderer?.setPixelRatio) {
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+              }
+            } catch (_) { /* noop */ }
+
+
           }}
           scene="/assets/skills-keyboard.spline"
         />
