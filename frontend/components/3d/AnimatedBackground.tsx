@@ -504,14 +504,6 @@ const AnimatedBackground = () => {
           onLoad={(app: Application) => {
             setSplineApp(app);
             bypassLoading();
-            try {
-              const renderer = (app as unknown as { _renderer?: { setPixelRatio: (r: number) => void } })._renderer;
-              if (renderer?.setPixelRatio) {
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-              }
-            } catch (_) { /* noop */ }
-
-
           }}
           scene="/assets/skills-keyboard.spline"
         />
