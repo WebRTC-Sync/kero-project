@@ -115,8 +115,6 @@ const AnimatedBackground = () => {
 
    const handleMouseHover = (e: SplineEvent) => {
      if (!splineApp || selectedSkillRef.current?.name === e.target.name) return;
-     // Disable sounds only in hero section (first viewport)
-     if (typeof window !== 'undefined' && window.scrollY < window.innerHeight * 0.5) return;
 
      if (e.target.name === "body" || e.target.name === "platform") {
        if (selectedSkillRef.current) playReleaseSound();
@@ -127,14 +125,16 @@ const AnimatedBackground = () => {
          splineApp.setVariable("desc", "");
        }
      } else {
-       const skill = findSkillFromObject(e.target);
-       if (skill && (!selectedSkillRef.current || selectedSkillRef.current.name !== skill.name)) {
-         if (selectedSkillRef.current) playReleaseSound();
-         playPressSound();
-         setSelectedSkill(skill);
-         selectedSkillRef.current = skill;
-         splineApp.setVariable("heading", skill.label);
-         splineApp.setVariable("desc", skill.shortDescription);
+       if (!selectedSkillRef.current || selectedSkillRef.current.name !== e.target.name) {
+         const skill = SKILLS[e.target.name as SkillNames];
+         if (skill) {
+           if (selectedSkillRef.current) playReleaseSound();
+           playPressSound();
+           setSelectedSkill(skill);
+           selectedSkillRef.current = skill;
+           splineApp.setVariable("heading", skill.label);
+           splineApp.setVariable("desc", skill.shortDescription);
+         }
        }
      }
    };
@@ -153,17 +153,15 @@ const AnimatedBackground = () => {
     };
 
      splineApp.addEventListener("keyUp", () => {
-       const inHeroViewport = typeof window !== 'undefined' && window.scrollY < window.innerHeight * 0.5;
-       if (!splineApp || isInputFocused() || inHeroViewport) return;
+       if (!splineApp || isInputFocused()) return;
        playReleaseSound();
        splineApp.setVariable("heading", "");
        splineApp.setVariable("desc", "");
      });
 
      splineApp.addEventListener("keyDown", (e) => {
-       const inHeroViewport = typeof window !== 'undefined' && window.scrollY < window.innerHeight * 0.5;
-       if (!splineApp || isInputFocused() || inHeroViewport) return;
-      const skill = findSkillFromObject(e.target);
+       if (!splineApp || isInputFocused()) return;
+       const skill = SKILLS[e.target.name as SkillNames];
       if (skill) {
         playPressSound();
         setSelectedSkill(skill);

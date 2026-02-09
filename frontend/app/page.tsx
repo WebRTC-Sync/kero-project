@@ -31,7 +31,7 @@ export default function Home() {
           <section id="hero">
             <HeroSection />
           </section>
-           <section id="team" className="relative h-screen flex items-end pb-[4vh]">
+           <section id="team" className="relative h-[150vh] flex items-end pb-[10vh]">
              <div className="w-full">
                <TeamMarquee />
              </div>

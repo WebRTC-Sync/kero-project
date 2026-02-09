@@ -6,7 +6,7 @@ const SkillsSection = () => {
   return (
     <section
       id="skills"
-      className="relative w-full h-screen pointer-events-none"
+      className="relative w-full h-screen md:h-[150dvh] pointer-events-none"
     >
        <div className="sticky top-[70px]">
          <RevealAnimation>
