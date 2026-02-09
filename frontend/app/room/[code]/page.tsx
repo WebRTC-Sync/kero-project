@@ -653,6 +653,28 @@ export default function RoomPage() {
   }
 
   if (gameStatus === "playing" && currentSong) {
+    if (room?.gameMode === "perfect_score") {
+      return (
+        <div className="fixed inset-0 bg-black text-white">
+          <GameComponent
+            onBackAction={() => {
+              dispatch(setGameStatus("waiting"));
+              dispatch(setCurrentSong(null));
+            }}
+            cameraElement={
+              <VideoRoom
+                roomCode={code}
+                participantName={userName}
+                participantId={visitorId}
+                hideControls={true}
+                layout="column"
+                onStatusChange={setMediaStatus}
+              />
+            }
+          />
+        </div>
+      );
+    }
     return (
       <div className="fixed inset-0 bg-black text-white">
         <GameComponent />
