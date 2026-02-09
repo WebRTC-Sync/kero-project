@@ -16,7 +16,7 @@ export const STATES = {
   team: {
     desktop: {
       scale: { x: 0.50, y: 0.50, z: 0.50 },
-      position: { x: 0, y: -40, z: 0 },
+      position: { x: 150, y: -40, z: 0 },
       rotation: { x: 0, y: Math.PI / 12, z: 0 },
     },
     mobile: {
@@ -28,7 +28,7 @@ export const STATES = {
   skills: {
     desktop: {
       scale: { x: 0.50, y: 0.50, z: 0.50 },
-      position: { x: 0, y: -40, z: 0 },
+      position: { x: 150, y: -40, z: 0 },
       rotation: { x: 0, y: Math.PI / 12, z: 0 },
     },
     mobile: {
@@ -40,7 +40,7 @@ export const STATES = {
   architecture: {
     desktop: {
       scale: { x: 0.50, y: 0.50, z: 0.50 },
-      position: { x: 0, y: -40, z: 0 },
+      position: { x: 150, y: -40, z: 0 },
       rotation: { x: Math.PI / 12, y: -Math.PI / 4, z: 0 },
     },
     mobile: {
@@ -52,7 +52,7 @@ export const STATES = {
   features: {
     desktop: {
       scale: { x: 0.50, y: 0.50, z: 0.50 },
-      position: { x: 0, y: -40, z: 0 },
+      position: { x: 150, y: -40, z: 0 },
       rotation: { x: Math.PI, y: Math.PI / 3, z: Math.PI },
     },
     mobile: {
