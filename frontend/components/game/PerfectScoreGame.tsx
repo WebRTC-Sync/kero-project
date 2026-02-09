@@ -43,6 +43,13 @@ const LABEL_AREA_WIDTH = 64;
 const SMOOTHING_WINDOW_SIZE = 5;
 const SNAP_MIDI_THRESHOLD = 0.35;
 
+// 노래방 싱크 설정 상수
+const SYNC_CONFIG = {
+  WORD_LEAD_TIME: 0,            // 단어 하이라이트가 미리 시작하는 시간 (초)
+  NEXT_LINE_PREVIEW: 1.5,      // 다음 가사 미리보기 시간 (초)
+  LINE_HOLD_AFTER_END: 1.0,    // 가사가 끝난 후 유지 시간 (초)
+};
+
 type JudgmentLabel = "PERFECT" | "GREAT" | "GOOD" | "NORMAL" | "BAD";
 
 type GameStats = {
@@ -109,6 +116,39 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
   const { currentSong, status, songQueue, scores } = useSelector((state: RootState) => state.game);
   const { participants, code: roomCode } = useSelector((state: RootState) => state.room);
 
+  const formatTime = (time: number) => {
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const [localTime, setLocalTime] = useState(0);
+
+  const getWordProgressInLine = useCallback((line: LyricsLine, wordIndex: number): number => {
+    if (!line.words || line.words.length === 0) return 0;
+    
+    const word = line.words[wordIndex];
+    const wordStart = word.startTime - SYNC_CONFIG.WORD_LEAD_TIME;
+    const wordEnd = word.endTime;
+    const wordDuration = wordEnd - wordStart;
+    
+    if (wordDuration <= 0) return localTime >= wordStart ? 100 : 0;
+    if (localTime < wordStart) return 0;
+    if (localTime >= wordEnd) return 100;
+    
+    const t = (localTime - wordStart) / wordDuration;
+    return Math.min(100, Math.max(0, t * 100));
+  }, [localTime]);
+
+  const getLineProgress = useCallback((line: LyricsLine): number => {
+    const adjustedStart = line.startTime;
+    
+    if (localTime < adjustedStart) return 0;
+    if (localTime >= line.endTime) return 100;
+    
+    return ((localTime - adjustedStart) / (line.endTime - adjustedStart)) * 100;
+  }, [localTime]);
+
   const rafRef = useRef<number | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -137,7 +177,6 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMicOn, setIsMicOn] = useState(true);
-  const [localTime, setLocalTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [audioLoaded, setAudioLoaded] = useState(false);
   const [score, setScore] = useState(0);
@@ -156,6 +195,39 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
   const lyrics: LyricsLine[] = currentSong?.lyrics || [];
   const audioUrl = currentSong?.instrumentalUrl || currentSong?.audioUrl;
   const progress = duration ? (localTime / duration) * 100 : 0;
+
+  const renderLine = useCallback((lineIndex: number, align: 'start' | 'end') => {
+    const line = lyrics[lineIndex];
+    if (!line) return null;
+    const isLineWaiting = currentLyricIndex < lineIndex;
+    
+    return (
+      <div className={`self-${align} w-full max-w-[90%] ${align === 'start' ? 'pl-2 sm:pl-4 md:pl-10 text-left' : 'pr-2 sm:pr-4 md:pr-10 text-right'} relative`}>
+        <div className={`flex flex-col gap-0 ${align === 'end' ? 'items-end' : 'items-start'}`}>
+          <div className={`flex flex-wrap gap-x-1 sm:gap-x-2 leading-normal ${align === 'end' ? 'justify-end' : 'justify-start'}`}>
+            {line.words && line.words.length > 0 ? (
+               line.words.map((word, i) => {
+                 const wordProgress = getWordProgressInLine(line, i);
+                 return (
+                    <span key={i} className="relative inline-flex flex-col items-center">
+                       <span className="relative text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black leading-tight">
+                         <span className={`text-white relative z-10 ${isLineWaiting ? 'opacity-70' : 'opacity-100'}`} style={{ WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{word.text}</span>
+                         <span className="absolute left-0 top-0 text-cyan-400 whitespace-nowrap z-20" style={{ clipPath: `inset(-0.25em ${100 - wordProgress}% -0.25em 0)`, transition: 'clip-path 60ms linear', WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{word.text}</span>
+                       </span>
+                    </span>
+                 );
+               })
+            ) : (
+                <div className="relative text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black">
+                     <span className={`text-white ${isLineWaiting ? 'opacity-70' : 'opacity-100'}`} style={{ WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{line.text}</span>
+                     <span className="absolute left-0 top-0 text-cyan-400 whitespace-nowrap" style={{ clipPath: `inset(-0.25em ${100 - getLineProgress(line)}% -0.25em 0)`, WebkitTextStroke: '2px rgba(0,0,0,0.8)', paintOrder: 'stroke fill' }}>{line.text}</span>
+                </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }, [lyrics, currentLyricIndex, getWordProgressInLine, getLineProgress]);
 
   const myNickname = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -817,114 +889,103 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
       });
 
       const trail = userPitchTrailRef.current;
+      // ONLY draw if we have recent pitch data
       if (trail.length > 0) {
-        const currentTargetWord = words.find(
-          (word) => typeof word.midi === "number" && now >= word.startTime && now <= word.endTime
-        );
-
-        ctx.save();
-        ctx.strokeStyle = "#4ecdc4";
-        ctx.lineWidth = 5;
-        ctx.shadowColor = "rgba(78,205,196,0.9)";
-        ctx.shadowBlur = 18;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        ctx.beginPath();
-
-        let started = false;
-        for (let i = 0; i < trail.length; i++) {
-          const point = trail[i];
-          const x = hitLineX + (point.time - now) * pixelsPerSecond;
-          const y = midiToY(point.midi);
-          if (x < 0 || x > width) continue;
-
-          if (!started) {
-            ctx.moveTo(x, y);
-            started = true;
-          } else {
-            const prevPoint = trail[i - 1];
-            if (!prevPoint || point.time - prevPoint.time > 0.3 || Math.abs(point.midi - prevPoint.midi) > 12) {
-              ctx.moveTo(x, y);
-            } else {
-              ctx.lineTo(x, y);
-            }
-          }
-        }
-        ctx.stroke();
-
         const lastPoint = trail[trail.length - 1];
-        if (lastPoint) {
-          const headX = hitLineX + (lastPoint.time - now) * pixelsPerSecond;
-          const headY = midiToY(lastPoint.midi);
-          if (headX > 0 && headX < width) {
-            const noteLabel = midiToNoteLabel(lastPoint.midi);
-            const targetMidi = typeof currentTargetWord?.midi === "number" ? currentTargetWord.midi : null;
-            const snapped = targetMidi !== null && Math.abs(lastPoint.midi - targetMidi) <= SNAP_MIDI_THRESHOLD;
+        // Only draw if the last point is very recent (within 0.2s)
+        if (Math.abs(now - lastPoint.time) < 0.2) {
+           const currentTargetWord = words.find(
+             (word) => typeof word.midi === "number" && now >= word.startTime && now <= word.endTime
+           );
 
-            setSnapIndicatorActive(snapped);
-            setSnapNoteLabel(snapped && targetMidi !== null ? midiToNoteLabel(targetMidi) : "");
+           const headX = hitLineX + (lastPoint.time - now) * pixelsPerSecond;
+           const headY = midiToY(lastPoint.midi);
+           
+           if (headX > 0 && headX < width) {
+             const targetMidi = currentTargetWord?.midi;
+             let orbColor = "#ef4444"; // default Red
+             let glowColor = "rgba(239, 68, 68, 0.6)";
+             
+             if (typeof targetMidi === 'number') {
+                const diff = Math.abs(lastPoint.midi - targetMidi);
+                if (diff <= 0.5) {
+                    orbColor = "#10b981"; // Green
+                    glowColor = "rgba(16, 185, 129, 0.8)";
+                } else if (diff <= 1.5) {
+                    orbColor = "#f0c040"; // Yellow
+                    glowColor = "rgba(240, 192, 64, 0.8)";
+                }
+             }
 
-            if (snapped && targetMidi !== null) {
-              const targetY = midiToY(targetMidi);
-              ctx.strokeStyle = "rgba(16,185,129,0.85)";
-              ctx.lineWidth = 2;
-              ctx.setLineDash([6, 4]);
-              ctx.beginPath();
-              ctx.moveTo(headX, headY);
-              ctx.lineTo(hitLineX, targetY);
-              ctx.stroke();
-              ctx.setLineDash([]);
+             ctx.save();
+             // Glow
+             ctx.shadowColor = glowColor;
+             ctx.shadowBlur = 20;
+             ctx.fillStyle = orbColor;
+             
+             ctx.beginPath();
+             ctx.arc(headX, headY, 12, 0, Math.PI * 2);
+             ctx.fill();
+             
+             // Inner white core
+             ctx.fillStyle = "#ffffff";
+             ctx.shadowBlur = 10;
+             ctx.beginPath();
+             ctx.arc(headX, headY, 5, 0, Math.PI * 2);
+             ctx.fill();
+             
+             ctx.restore();
 
-              ctx.fillStyle = "rgba(16,185,129,0.95)";
-              ctx.shadowColor = "rgba(16,185,129,0.9)";
-              ctx.shadowBlur = 20;
-              ctx.beginPath();
-              ctx.arc(headX, headY, 8, 0, Math.PI * 2);
-              ctx.fill();
-            }
+             // Note Label (re-use existing logic but styled)
+             const noteLabel = midiToNoteLabel(lastPoint.midi);
+             const snapped = typeof targetMidi === 'number' && Math.abs(lastPoint.midi - targetMidi) <= SNAP_MIDI_THRESHOLD;
 
-            ctx.fillStyle = "#ffffff";
-            ctx.shadowColor = "rgba(255,255,255,0.95)";
-            ctx.shadowBlur = 14;
-            ctx.beginPath();
-            ctx.arc(headX, headY, 5, 0, Math.PI * 2);
-            ctx.fill();
+             setSnapIndicatorActive(snapped);
+             setSnapNoteLabel(snapped && typeof targetMidi === 'number' ? midiToNoteLabel(targetMidi) : "");
 
-            const noteTagWidth = 46;
-            const noteTagHeight = 22;
-            const noteTagX = clamp(headX + 12, 8, width - noteTagWidth - 8);
-            const noteTagY = clamp(headY - 32, 6, height - noteTagHeight - 6);
+             if (snapped && typeof targetMidi === 'number') {
+                // Snap line logic...
+               const targetY = midiToY(targetMidi);
+               ctx.save();
+               ctx.strokeStyle = "rgba(16,185,129,0.5)";
+               ctx.lineWidth = 2;
+               ctx.setLineDash([4, 4]);
+               ctx.beginPath();
+               ctx.moveTo(headX, headY);
+               ctx.lineTo(hitLineX, targetY);
+               ctx.stroke();
+               ctx.restore();
+             }
 
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = "rgba(255,255,255,0.14)";
-            ctx.strokeStyle = snapped ? "rgba(16,185,129,0.88)" : "rgba(240,192,64,0.7)";
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            const r = 11;
-            ctx.moveTo(noteTagX + r, noteTagY);
-            ctx.lineTo(noteTagX + noteTagWidth - r, noteTagY);
-            ctx.arcTo(noteTagX + noteTagWidth, noteTagY, noteTagX + noteTagWidth, noteTagY + r, r);
-            ctx.lineTo(noteTagX + noteTagWidth, noteTagY + noteTagHeight - r);
-            ctx.arcTo(noteTagX + noteTagWidth, noteTagY + noteTagHeight, noteTagX + noteTagWidth - r, noteTagY + noteTagHeight, r);
-            ctx.lineTo(noteTagX + r, noteTagY + noteTagHeight);
-            ctx.arcTo(noteTagX, noteTagY + noteTagHeight, noteTagX, noteTagY + noteTagHeight - r, r);
-            ctx.lineTo(noteTagX, noteTagY + r);
-            ctx.arcTo(noteTagX, noteTagY, noteTagX + r, noteTagY, r);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = snapped ? "#b6ffdf" : "#f7d06d";
-            ctx.font = "700 12px 'IBM Plex Mono', monospace";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(noteLabel, noteTagX + noteTagWidth / 2, noteTagY + noteTagHeight / 2 + 0.5);
-          }
+             // Note Tag
+             const noteTagWidth = 46;
+             const noteTagHeight = 22;
+             const noteTagX = clamp(headX + 16, 8, width - noteTagWidth - 8);
+             const noteTagY = clamp(headY - 11, 6, height - noteTagHeight - 6);
+
+             ctx.save();
+             ctx.fillStyle = "rgba(0,0,0,0.6)";
+             ctx.strokeStyle = orbColor;
+             ctx.lineWidth = 1;
+             
+             // Rounded rect for tag
+             ctx.beginPath();
+             const r = 4;
+             ctx.roundRect(noteTagX, noteTagY, noteTagWidth, noteTagHeight, r);
+             ctx.fill();
+             ctx.stroke();
+
+             ctx.fillStyle = orbColor;
+             ctx.font = "700 12px 'IBM Plex Mono', monospace";
+             ctx.textAlign = "center";
+             ctx.textBaseline = "middle";
+             ctx.fillText(noteLabel, noteTagX + noteTagWidth / 2, noteTagY + noteTagHeight / 2 + 1);
+             ctx.restore();
+           }
         } else {
-          setSnapIndicatorActive(false);
-          setSnapNoteLabel("");
+           setSnapIndicatorActive(false);
+           setSnapNoteLabel("");
         }
-
-        ctx.restore();
       } else {
         setSnapIndicatorActive(false);
         setSnapNoteLabel("");
@@ -1174,13 +1235,6 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
               </div>
             </div>
           </div>
-
-          <div className="mt-3 h-1.5 w-full cursor-pointer overflow-hidden rounded-full bg-white/10" onClick={handleSeek}>
-            <motion.div
-              className="h-full"
-              style={{ width: `${progress}%`, background: "linear-gradient(90deg, #4ecdc4 0%, #f0c040 100%)" }}
-            />
-          </div>
         </div>
 
         {/* Judgment Score Bar — TJ parallelogram style */}
@@ -1209,30 +1263,30 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
           })}
         </div>
 
-        <div className="relative flex min-h-0 flex-1 flex-col gap-3 lg:flex-row" data-testid="perfect-layout-shell">
+        <div className="relative flex min-h-0 flex-1 gap-3 lg:gap-4" data-testid="perfect-layout-shell">
           {/* Turn sidebar - moved to LEFT */}
-          <aside className={`${isSidebarCollapsed ? "w-12" : "w-[250px]"} order-first hidden h-full shrink-0 flex-col rounded-2xl border border-white/15 bg-white/[0.05] p-3 backdrop-blur-xl transition-all duration-300 lg:flex`} data-testid="perfect-turn-sidebar">
+          <aside className={`${isSidebarCollapsed ? "w-10" : "w-[180px]"} order-first hidden h-full shrink-0 flex-col rounded-2xl border border-white/15 bg-white/[0.05] p-2 backdrop-blur-xl transition-all duration-300 lg:flex`} data-testid="perfect-turn-sidebar">
             <button
-              className="mb-3 flex h-8 w-8 items-center justify-center self-end rounded-full border border-white/20 bg-white/10 text-white/75 hover:bg-white/20"
+              className="mb-2 flex h-7 w-7 items-center justify-center self-end rounded-full border border-white/20 bg-white/10 text-white/75 hover:bg-white/20"
               onClick={() => setIsSidebarCollapsed((prev) => !prev)}
             >
-              {isSidebarCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              {isSidebarCollapsed ? <ChevronLeft className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             </button>
 
             {!isSidebarCollapsed && (
               <>
-                <p className="mb-2 text-[11px] uppercase tracking-[0.3em] text-white/55">Turn Order</p>
-                <div className="space-y-2">
+                <p className="mb-2 text-[9px] uppercase tracking-[0.3em] text-white/55 pl-1">Turn Order</p>
+                <div className="space-y-1.5 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
                   {participants.map((participant, index) => {
                     const isActive = String(participant.id) === String(currentSingerId);
                     const scoreValue = turnScores[String(participant.id)] ?? 0;
                     return (
-                      <div key={String(participant.id)} className={`rounded-xl border px-3 py-2 ${isActive ? "border-[#f0c040]/55 bg-[#f0c040]/10" : "border-white/10 bg-white/[0.03]"}`}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-white/65">{index + 1}</span>
-                          <span className="text-sm font-medium text-white">{participant.nickname}</span>
+                      <div key={String(participant.id)} className={`rounded-lg border px-2 py-1.5 ${isActive ? "border-[#f0c040]/55 bg-[#f0c040]/10" : "border-white/10 bg-white/[0.03]"}`}>
+                        <div className="flex items-center justify-between min-w-0">
+                          <span className="text-[10px] text-white/65 shrink-0 mr-1">{index + 1}</span>
+                          <span className="text-xs font-medium text-white truncate min-w-0 flex-1">{participant.nickname}</span>
                         </div>
-                        <div className="mt-1 text-right text-xs text-white/55" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                        <div className="mt-0.5 text-right text-[10px] text-white/55" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
                           {scoreValue.toFixed(0)} pts
                         </div>
                       </div>
@@ -1244,8 +1298,8 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
           </aside>
 
           {/* Main content (canvas + lyrics) */}
-          <div className="relative flex min-h-0 flex-1 flex-col" data-testid="perfect-main-content">
-            <div className="relative min-h-0 flex-1 overflow-hidden rounded-3xl border border-white/15 bg-white/[0.03] backdrop-blur-lg">
+          <div className="relative flex flex-1 flex-col min-h-0" data-testid="perfect-main-content">
+            <div className="relative flex-1 min-h-0 overflow-hidden rounded-t-3xl border border-white/15 bg-white/[0.03] backdrop-blur-lg">
               <div ref={containerRef} className="h-full w-full">
                 <canvas ref={canvasRef} className="h-full w-full" />
               </div>
@@ -1298,62 +1352,55 @@ export default function PerfectScoreGame({ onBackAction, cameraElement }: Perfec
               </div>
             </div>
 
-            {/* Back button */}
-            {onBackAction && (
-              <button
-                onClick={onBackAction}
-                className="absolute top-3 left-3 z-40 p-2 rounded-full bg-black/50 backdrop-blur-sm text-white/60 hover:text-white hover:bg-black/70 transition-all"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-            )}
+            {/* Playback Progress Bar */}
+            <div className="flex items-center gap-3 px-4 py-2 border-x border-white/15 bg-white/[0.03] backdrop-blur-lg">
+               <button disabled className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/40">
+                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+               </button>
+               <span className="text-xs text-white/50 font-mono w-10 text-right">{formatTime(localTime)}</span>
+               <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden relative" onClick={handleSeek} style={{ cursor: 'pointer' }}>
+                 <div className="h-full bg-gradient-to-r from-cyan-400 to-amber-400 absolute left-0 top-0 transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} />
+               </div>
+               <span className="text-xs text-white/50 font-mono w-10">{formatTime(duration)}</span>
+            </div>
 
-            <div className="mt-3 rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-4 text-center backdrop-blur-xl sm:px-6">
-              <div className="flex min-h-[56px] flex-wrap justify-center gap-x-[0.32em] text-3xl font-extrabold sm:text-4xl"
-                   style={{
-                     WebkitTextStroke: "4px #3b82f6",
-                     paintOrder: "stroke fill",
-                     textShadow: "4px 4px 0px rgba(0,0,0,0.5), 0 0 12px rgba(59,130,246,0.6), 0 0 24px rgba(59,130,246,0.3)",
-                   }}>
-                {currentLine ? (
-                  currentLine.words && currentLine.words.length > 0 ? (
-                    currentLine.words.map((word, idx) => {
-                      const durationValue = word.endTime - word.startTime;
-                      const progressValue = durationValue > 0
-                        ? clamp((localTime - word.startTime) / durationValue, 0, 1)
-                        : localTime >= word.endTime
-                        ? 1
-                        : 0;
-                      return (
-                        <span key={idx} className="relative inline-block">
-                          <span className="text-white/35">{word.text}</span>
-                          <span
-                            className="absolute left-0 top-0 whitespace-nowrap text-[#f0c040]"
-                            style={{
-                              clipPath: `inset(-0.25em ${100 - progressValue * 100}% -0.25em 0)`,
-                              textShadow: "0 0 14px rgba(240,192,64,0.62)",
-                            }}
-                          >
-                            {word.text}
-                          </span>
-                        </span>
-                      );
-                    })
-                  ) : (
-                    <span>{currentLine.text}</span>
-                  )
-                ) : (
-                  <span>&nbsp;</span>
+            {/* Lyrics Area */}
+            <div className="relative shrink-0 min-h-[160px] sm:min-h-[200px] rounded-b-3xl border border-white/15 bg-white/[0.04] p-4 sm:p-6 backdrop-blur-xl flex flex-col justify-center overflow-hidden">
+               {onBackAction && (
+                  <button
+                    onClick={onBackAction}
+                    className="absolute top-3 left-3 z-40 p-2 rounded-full bg-black/50 backdrop-blur-sm text-white/60 hover:text-white hover:bg-black/70 transition-all"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
                 )}
-              </div>
 
-              <p className="mt-2 min-h-[24px] text-lg font-semibold sm:text-xl" style={{ color: "rgba(255,255,255,0.55)", WebkitTextStroke: "0.5px rgba(0,0,0,0.4)", paintOrder: "stroke fill" }}>{nextLine?.text || "\u00A0"}</p>
+               <AnimatePresence mode="wait">
+                 {currentLyricIndex >= 0 && (() => {
+                   const pairIndex = Math.floor(currentLyricIndex / 2);
+                   const lineAIndex = pairIndex * 2;
+                   const lineBIndex = pairIndex * 2 + 1;
+                   return (
+                     <motion.div
+                       key={`pair-${pairIndex}`}
+                       initial={{ opacity: 0, y: 20 }}
+                       animate={{ opacity: 1, y: 0 }}
+                       exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
+                       transition={{ duration: 0.3 }}
+                       className="flex flex-col gap-4 sm:gap-6 w-full"
+                     >
+                       {renderLine(lineAIndex, 'start')}
+                       {lyrics[lineBIndex] && renderLine(lineBIndex, 'end')}
+                     </motion.div>
+                   );
+                 })()}
+               </AnimatePresence>
             </div>
           </div>
 
           {/* Camera aside - RIGHT side */}
           {cameraElement && (
-            <aside className="h-[180px] w-full shrink-0 rounded-2xl overflow-hidden border border-white/15 bg-black/50 shadow-2xl sm:h-[200px] lg:h-full lg:w-[280px] xl:w-[320px]" data-testid="perfect-camera-panel">
+            <aside className="hidden lg:block h-full w-[280px] xl:w-[320px] shrink-0 rounded-2xl overflow-hidden border border-white/15 bg-black/50 shadow-2xl" data-testid="perfect-camera-panel">
               <div className="h-full w-full">{cameraElement}</div>
             </aside>
           )}

@@ -840,7 +840,7 @@ export default function LyricsQuizGame({
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none"></div>
 
       <div className="relative z-10 flex-1 flex flex-col p-3 min-w-0 min-h-0">
-        <div className="flex items-center justify-between py-2 px-1 sm:px-5 border-b border-white/10 gap-2 shrink-0">
+        <div className="flex items-center py-2 px-1 sm:px-5 border-b border-white/10 gap-2 shrink-0">
           <div className="flex items-center gap-1.5 sm:gap-3">
             {onBack && (
               <button
@@ -895,14 +895,16 @@ export default function LyricsQuizGame({
                 <span className="text-sm sm:text-base font-bold text-white">{streak} <span className="hidden sm:inline">연속 정답!</span></span>
               </motion.div>
             )}
-          </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="flex flex-col items-end">
-              <span className="text-xs sm:text-sm font-bold text-white/60 uppercase tracking-widest">Score</span>
-              <span className="text-xl sm:text-2xl font-black text-white">{localScore.toLocaleString()}</span>
-            </div>
-            <TimerCircle timeLeft={timeLeft} timeLimit={currentQuestion.timeLimit || 20} />
+            {!cameraElement && (
+              <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+                <div className="flex flex-col items-end">
+                  <span className="text-xs sm:text-sm font-bold text-white/60 uppercase tracking-widest">Score</span>
+                  <span className="text-xl sm:text-2xl font-black text-white">{localScore.toLocaleString()}</span>
+                </div>
+                <TimerCircle timeLeft={timeLeft} timeLimit={currentQuestion.timeLimit || 20} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -961,8 +963,17 @@ export default function LyricsQuizGame({
             <div className="flex-1 w-full relative min-h-0">{renderQuestionContent()}</div>
           </div>
           {cameraElement && (
-            <aside className="h-[120px] w-full shrink-0 rounded-2xl overflow-hidden border border-white/20 bg-black/50 shadow-2xl sm:h-[160px] lg:h-full lg:w-[260px] xl:w-[300px]" data-testid="quiz-camera-panel">
-              <div className="h-full w-full">{cameraElement}</div>
+            <aside className="flex flex-col gap-3 h-[180px] w-full shrink-0 lg:h-full lg:w-[320px] xl:w-[360px]" data-testid="quiz-camera-panel">
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-black/40 border border-white/10 shrink-0">
+                <div className="flex flex-col">
+                  <span className="text-[10px] sm:text-xs font-bold text-white/60 uppercase tracking-widest">Score</span>
+                  <span className="text-lg sm:text-2xl font-black text-white">{localScore.toLocaleString()}</span>
+                </div>
+                <TimerCircle timeLeft={timeLeft} timeLimit={currentQuestion.timeLimit || 20} />
+              </div>
+              <div className="flex-1 min-h-0 rounded-2xl overflow-hidden border border-white/20 bg-black/50 shadow-2xl [&_video]:object-cover [&_video]:w-full [&_video]:h-full">
+                <div className="h-full w-full [&>div]:h-full [&>div]:w-full [&>div>div]:h-full [&>div>div]:w-full">{cameraElement}</div>
+              </div>
             </aside>
           )}
         </div>
@@ -975,7 +986,8 @@ export default function LyricsQuizGame({
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className={`fixed bottom-0 left-0 right-0 h-auto py-6 sm:h-48 sm:py-0 z-40 flex items-center justify-center
+            className={`fixed bottom-0 left-0 h-auto py-6 sm:h-48 sm:py-0 z-40 flex items-center justify-center
+              ${cameraElement ? "right-0 lg:right-[320px] xl:right-[360px]" : "right-0"}
               ${roundResults.find(r => r.odId === "local" || r.odName === "나")?.isCorrect ? "bg-[#26890C]" : "bg-[#E21B3C]"}
             `}
           >

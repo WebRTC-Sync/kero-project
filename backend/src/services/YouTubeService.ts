@@ -283,7 +283,7 @@ export class YouTubeService {
       const args = [
         "--no-mark-watched",
         `https://www.youtube.com/watch?v=${videoId}`,
-        "-f", "251/140/bestaudio/best",
+        "-f", "bestaudio/best",
         "-g",
         "--no-playlist",
         "--no-warnings",
@@ -315,10 +315,11 @@ export class YouTubeService {
     onError: (err: string) => void,
     abortSignal?: AbortSignal,
   ): Promise<void> {
+    // Cookies intentionally excluded — piped streams can't retry on failure.
     const args = [
       "--no-mark-watched",
       `https://www.youtube.com/watch?v=${videoId}`,
-      "-f", "251/140/bestaudio/best",
+      "-f", "bestaudio/best",
       "-o", "-",
       "--no-playlist",
       "--no-warnings",
@@ -326,16 +327,18 @@ export class YouTubeService {
 
     const proc = spawn("yt-dlp", args);
     let stderrBuf = "";
+    let gotData = false;
 
     proc.stderr.on("data", (data: Buffer) => { stderrBuf += data.toString(); });
+    proc.stdout.on("data", () => { gotData = true; });
 
     proc.stdout.pipe(output, { end: false });
 
     const done = new Promise<void>((resolve, reject) => {
       proc.on("close", (code) => {
-        if (code !== 0) {
+        if (code !== 0 || !gotData) {
           console.error(`[yt-dlp] pipe stream failed (code ${code}):`, stderrBuf);
-          onError(stderrBuf);
+          onError(stderrBuf || `yt-dlp exited with code ${code}`);
         }
         if (!output.destroyed) {
           output.end();
@@ -346,21 +349,18 @@ export class YouTubeService {
       proc.on("error", (err) => {
         console.error("[yt-dlp] spawn error:", err.message);
         onError(err.message);
-        reject(err);
+        if (!output.destroyed) output.end();
+        resolve();
       });
     });
 
     if (abortSignal) {
-      const onAbort = () => {
-        proc.kill("SIGTERM");
-      };
+      const onAbort = () => { proc.kill("SIGTERM"); };
       abortSignal.addEventListener("abort", onAbort, { once: true });
-      proc.on("close", () => {
-        abortSignal.removeEventListener("abort", onAbort);
-      });
+      proc.on("close", () => { abortSignal.removeEventListener("abort", onAbort); });
     }
 
-    return this.withTimeout(done, 60000, "yt-dlp audio pipe timed out", proc);
+    await this.withTimeout(done, 30000, "yt-dlp audio pipe timed out", proc);
   }
 
   private formatDuration(seconds: number | null): string {

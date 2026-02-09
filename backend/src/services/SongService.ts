@@ -122,7 +122,7 @@ export class SongService {
         wrongAnswers,
         startTime: targetLine.startTime,
         endTime: targetLine.endTime,
-        timeLimit: 15,
+        timeLimit: 60,
         points: 1000,
       }));
     }
@@ -139,7 +139,7 @@ export class SongService {
         wrongAnswers: lines.map((l: LyricsLine) => l.text),
         startTime: lines[0].startTime,
         endTime: lines[3].endTime,
-        timeLimit: 25,
+        timeLimit: 60,
         points: 1000,
         metadata: { lineTexts: lines.map((l: LyricsLine) => l.text) },
       }));
@@ -167,7 +167,7 @@ export class SongService {
           wrongAnswers: [],
           startTime: line.startTime,
           endTime: line.endTime,
-          timeLimit: 12,
+          timeLimit: 60,
           points: 1000,
         }));
       }
@@ -236,9 +236,9 @@ export class SongService {
          wrongAnswers: otherTitles,
          startTime: audioStart,
          endTime: audioStart + 10,
-         timeLimit: 20,
-         points: 1000,
-         metadata: { audioUrl: song.instrumentalUrl || song.originalUrl, audioStartTime: audioStart, audioEndTime: audioStart + 10 },
+          timeLimit: 60,
+          points: 1000,
+          metadata: { audioUrl: song.instrumentalUrl || song.originalUrl, audioStartTime: audioStart, audioEndTime: audioStart + 10 },
        }));
     }
 
@@ -256,9 +256,9 @@ export class SongService {
          wrongAnswers: otherArtists,
          startTime: 0,
          endTime: 0,
-         timeLimit: 15,
-         points: 1000,
-         metadata: { audioUrl: song.instrumentalUrl || song.originalUrl },
+          timeLimit: 60,
+          points: 1000,
+          metadata: { audioUrl: song.instrumentalUrl || song.originalUrl },
        }));
     }
 
@@ -274,10 +274,10 @@ export class SongService {
         wrongAnswers: [],
         startTime: 0,
         endTime: 0,
-        timeLimit: 20,
-        points: 1000,
-        metadata: { hint: `${song.title.length}글자` },
-      }));
+          timeLimit: 60,
+         points: 1000,
+         metadata: { hint: `${song.title.length}글자` },
+       }));
     }
 
      // LYRICS_FILL
@@ -300,28 +300,28 @@ export class SongService {
         wrongAnswers: this.generateWrongAnswers(correct, lyrics),
         startTime: line.startTime,
         endTime: line.endTime,
-        timeLimit: 15,
-        points: 1000,
-      }));
-    }
+         timeLimit: 60,
+         points: 1000,
+       }));
+     }
 
-     // LYRICS_ORDER
-     for (let lo = 0; lo < 2; lo++) {
-       const orderSong = pickRandom(songs);
-       const orderLyrics = orderSong.lyrics || [];
-       if (orderLyrics.length >= 4) {
-         const startIdx = Math.floor(Math.random() * Math.max(1, orderLyrics.length - 3));
-         const lines = orderLyrics.slice(startIdx, startIdx + 4);
-         if (lines.length === 4) {
-           questions.push(quizRepository.create({
-             songId: orderSong.id,
-             type: QuizType.LYRICS_ORDER,
-             questionText: "다음 가사를 올바른 순서로 배열하세요",
-             correctAnswer: JSON.stringify([0, 1, 2, 3]),
-             wrongAnswers: lines.map((l: LyricsLine) => l.text),
-             startTime: lines[0].startTime,
-             endTime: lines[3].endTime,
-             timeLimit: 25,
+      // LYRICS_ORDER
+      for (let lo = 0; lo < 2; lo++) {
+        const orderSong = pickRandom(songs);
+        const orderLyrics = orderSong.lyrics || [];
+        if (orderLyrics.length >= 4) {
+          const startIdx = Math.floor(Math.random() * Math.max(1, orderLyrics.length - 3));
+          const lines = orderLyrics.slice(startIdx, startIdx + 4);
+          if (lines.length === 4) {
+            questions.push(quizRepository.create({
+              songId: orderSong.id,
+              type: QuizType.LYRICS_ORDER,
+              questionText: "다음 가사를 올바른 순서로 배열하세요",
+              correctAnswer: JSON.stringify([0, 1, 2, 3]),
+              wrongAnswers: lines.map((l: LyricsLine) => l.text),
+              startTime: lines[0].startTime,
+              endTime: lines[3].endTime,
+              timeLimit: 60,
              points: 1000,
              metadata: { lineTexts: lines.map((l: LyricsLine) => l.text) },
            }));
@@ -347,13 +347,13 @@ export class SongService {
              wrongAnswers: [],
              startTime: line.startTime,
              endTime: line.endTime,
-             timeLimit: 12,
-             points: 1000,
-           }));
-         }
+              timeLimit: 60,
+              points: 1000,
+            }));
+          }
+        }
        }
-     }
-
+      
     return shuffle(questions).slice(0, count);
   }
 
@@ -692,27 +692,27 @@ export class SongService {
           questionText: qWords.join(" "),
           correctAnswer: correct,
           wrongAnswers: this.generateWrongAnswersFromLines(correct, song.lines),
-          timeLimit: 15,
-          points: 1000,
-          metadata: { source: "lyrics-api", songTitle: song.title, songArtist: song.artist },
-        });
-      }
+           timeLimit: 60,
+           points: 1000,
+           metadata: { source: "lyrics-api", songTitle: song.title, songArtist: song.artist },
+         });
+       }
 
-      const lyricsOrderCount = Math.ceil(count * 0.10);
-      for (let lo = 0; lo < lyricsOrderCount; lo++) {
-        const song = pickRandom(songsWithLyrics);
-        if (song.lines.length < 4) continue;
+       const lyricsOrderCount = Math.ceil(count * 0.10);
+       for (let lo = 0; lo < lyricsOrderCount; lo++) {
+         const song = pickRandom(songsWithLyrics);
+         if (song.lines.length < 4) continue;
 
-        const startIdx = Math.floor(Math.random() * Math.max(1, song.lines.length - 3));
-        const lines = song.lines.slice(startIdx, startIdx + 4);
-        if (lines.length !== 4) continue;
+         const startIdx = Math.floor(Math.random() * Math.max(1, song.lines.length - 3));
+         const lines = song.lines.slice(startIdx, startIdx + 4);
+         if (lines.length !== 4) continue;
 
-        lyricsQuestions.push({
-          type: "lyrics_order",
-          questionText: "다음 가사를 올바른 순서로 배열하세요",
-          correctAnswer: JSON.stringify([0, 1, 2, 3]),
-          wrongAnswers: lines,
-          timeLimit: 25,
+         lyricsQuestions.push({
+           type: "lyrics_order",
+           questionText: "다음 가사를 올바른 순서로 배열하세요",
+           correctAnswer: JSON.stringify([0, 1, 2, 3]),
+           wrongAnswers: lines,
+           timeLimit: 60,
           points: 1000,
           metadata: {
             lineTexts: lines,
@@ -734,12 +734,12 @@ export class SongService {
         if (!isTrue && otherSongs.length === 0) continue;
 
         const displayTitle = isTrue ? song.title : pickRandom(otherSongs).title;
-        lyricsQuestions.push({
-          type: "true_false",
-          questionText: `이 가사는 '${displayTitle}'의 가사이다: "${line}"`,
-          correctAnswer: String(isTrue),
-          wrongAnswers: [],
-          timeLimit: 12,
+         lyricsQuestions.push({
+           type: "true_false",
+           questionText: `이 가사는 '${displayTitle}'의 가사이다: "${line}"`,
+           correctAnswer: String(isTrue),
+           wrongAnswers: [],
+           timeLimit: 60,
           points: 1000,
           metadata: { source: "lyrics-api", songTitle: song.title, songArtist: song.artist },
         });

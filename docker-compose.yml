@@ -29,6 +29,8 @@ services:
       - "4000"
     env_file:
       - ./backend/.env
+    volumes:
+      - ./backend/cookies:/app/cookies
     depends_on:
       mysql:
         condition: service_started

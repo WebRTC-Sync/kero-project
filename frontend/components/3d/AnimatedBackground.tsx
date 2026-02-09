@@ -1,8 +1,6 @@
 "use client";
 
-// Animated Spline background controller
-
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import { Application, SPEObject, SplineEvent } from "@splinetool/runtime";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -19,7 +17,6 @@ import { Section, getKeyboardState } from "./animated-background-config";
 
 gsap.registerPlugin(ScrollTrigger);
 
-// Helper: traverse parent chain to find a matching skill
 const findSkillFromObject = (obj: { name: string; id: string } | null): Skill | null => {
   let current: any = obj;
   while (current) {
@@ -30,64 +27,11 @@ const findSkillFromObject = (obj: { name: string; id: string } | null): Skill | 
   return null;
 };
 
-/*
- * getAllObjects() returns a flat list ordered by scene hierarchy.
- * We build a map of skill positions, then for each skill look forward
- * (and backward as fallback) for the nearest keycap-desktop to color.
- */
-const applyBrandColors = async (app: Application) => {
-  try {
-    const allObjects = app.getAllObjects();
-    let applied = 0;
-    const colored = new Set<number>();
-
-    // Build skill position map
-    const skillEntries: { skill: typeof SKILLS[SkillNames]; idx: number }[] = [];
-    allObjects.forEach((obj, idx) => {
-      const skill = SKILLS[obj.name as SkillNames];
-      if (skill) skillEntries.push({ skill, idx });
-    });
-
-    const applyColor = (obj: any, skill: typeof SKILLS[SkillNames], objIdx: number) => {
-      if (colored.has(objIdx)) return false;
-      try { obj.color = skill.color; } catch (_) {}
-      try { if (obj.material) obj.material.alpha = 1; } catch (_) {}
-      colored.add(objIdx);
-      applied++;
-      return true;
-    };
-
-    for (const { skill, idx } of skillEntries) {
-      let found = false;
-      // Look forward for nearest keycap-desktop
-      for (let i = idx + 1; i < allObjects.length; i++) {
-        if (SKILLS[allObjects[i].name as SkillNames]) break;
-        if (allObjects[i].name === 'keycap-desktop') {
-          found = applyColor(allObjects[i], skill, i);
-          break;
-        }
-      }
-      // Fallback: look backward
-      if (!found) {
-        for (let i = idx - 1; i >= 0; i--) {
-          if (SKILLS[allObjects[i].name as SkillNames]) break;
-          if (allObjects[i].name === 'keycap-desktop') {
-            found = applyColor(allObjects[i], skill, i);
-            break;
-          }
-        }
-      }
-    }
-    console.log(`[applyBrandColors] Applied to ${applied} keycaps`);
-  } catch (e) {
-    console.error('[applyBrandColors] FATAL:', e);
-  }
-};
-
 const AnimatedBackground = () => {
   const isMobile = useMediaQuery("(max-width: 767px)");
   const [splineApp, setSplineApp] = useState<Application>();
   const selectedSkillRef = React.useRef<Skill | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const { playPressSound, playReleaseSound } = useSounds();
   const { isLoading, bypassLoading } = usePreloader();
@@ -366,27 +310,56 @@ const AnimatedBackground = () => {
 
   // --- Effects ---
 
-  // DPR fix: Spline renders at 2x backing store but mouse uses 1x client coords → raycast offset
+  // Pointer event overlay: intercept pointer events and forward with DPR-scaled coordinates
+  // Spline renders canvas at 2x (DPR) but uses raw client coords for raycasting,
+  // causing hitbox offset. We intercept events on a transparent overlay and dispatch
+  // synthetic events with scaled coordinates to fix the mismatch.
   useEffect(() => {
     if (!splineApp) return;
+    const overlay = overlayRef.current;
+    const canvas = (splineApp as unknown as { _canvas?: HTMLCanvasElement })._canvas
+      ?? document.querySelector('canvas');
+    if (!overlay || !canvas) return;
 
-    const fixCanvasDPR = () => {
-      try {
-        const renderer = (splineApp as unknown as { _renderer?: { setPixelRatio: (r: number) => void } })._renderer;
-        if (renderer?.setPixelRatio) renderer.setPixelRatio(1);
-        document.querySelectorAll('canvas').forEach((c) => {
-          if (c.width > c.clientWidth * 1.5) {
-            c.width = c.clientWidth;
-            c.height = c.clientHeight;
-          }
-        });
-        splineApp.setSize(window.innerWidth, window.innerHeight);
-      } catch (_) { /* noop */ }
+    const appAny = splineApp as unknown as { setGlobalEvents?: (v: boolean) => void };
+    appAny.setGlobalEvents?.(false);
+    canvas.style.pointerEvents = 'none';
+
+    const forwardPointer = (e: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+
+      const syntheticEvent = new PointerEvent(e.type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerId: e.pointerId,
+        pointerType: e.pointerType,
+        isPrimary: e.isPrimary,
+        buttons: e.buttons,
+        button: e.button,
+        clientX: rect.left + localX * scaleX,
+        clientY: rect.top + localY * scaleY,
+      });
+      canvas.dispatchEvent(syntheticEvent);
     };
 
-    requestAnimationFrame(fixCanvasDPR);
-    window.addEventListener('resize', fixCanvasDPR);
-    return () => window.removeEventListener('resize', fixCanvasDPR);
+    const pointerEvents = ['pointermove', 'pointerdown', 'pointerup', 'pointercancel'] as const;
+    pointerEvents.forEach(ev =>
+      overlay.addEventListener(ev, forwardPointer as EventListener, { passive: true })
+    );
+
+    return () => {
+      pointerEvents.forEach(ev =>
+        overlay.removeEventListener(ev, forwardPointer as EventListener)
+      );
+      canvas.style.pointerEvents = '';
+    };
   }, [splineApp]);
 
   useEffect(() => {
@@ -531,6 +504,7 @@ const AnimatedBackground = () => {
           scene="/assets/skills-keyboard.spline"
         />
       </Suspense>
+      <div ref={overlayRef} className="fixed inset-0 z-[1]" />
 
       <AnimatePresence>
         {selectedSkill && activeSection === "skills" && (
