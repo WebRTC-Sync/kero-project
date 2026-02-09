@@ -36,6 +36,7 @@ export default function Home() {
                <TeamMarquee />
              </div>
            </section>
+           <div className="h-[30vh]" aria-hidden="true" />
            <SkillsSection />
           <ArchitectureSection />
           <FeaturesSection />

@@ -197,7 +197,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "linux",
     label: "Linux",
     shortDescription: "Ubuntu 서버 — 모든 서비스가 돌아가는 안정적인 운영 체제",
-    color: "#FCC624",
+    color: "#ffffff",
     icon: "/assets/keycap-icons-hd/linux.png",
   },
   [SkillNames.DOCKER]: {
@@ -205,7 +205,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "docker",
     label: "Docker",
     shortDescription: "컨테이너화로 환경 통일 — 10개 서비스를 한 번에 배포",
-    color: "#0DB7ED",
+    color: "#2496ed",
     icon: "/assets/keycap-icons-hd/docker.png",
   },
   [SkillNames.NGINX]: {
@@ -253,7 +253,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "gsap___",
     label: "GSAP",
     shortDescription: "고성능 애니메이션 엔진 — 스크롤 트리거와 3D 카메라 전환",
-    color: "#88CE02",
+    color: "#0AE448",
     icon: "/assets/keycap-icons-hd/gsap.png",
   },
   [SkillNames.PYTORCH]: {
@@ -269,7 +269,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "ec2____",
     label: "AWS EC2",
     shortDescription: "클라우드 컴퓨팅 — 메인 서버와 GPU 스팟 인스턴스 운영",
-    color: "#F7931E",
+    color: "#FF9900",
     icon: "/assets/keycap-icons-hd/ec2.png",
   },
   [SkillNames.TYPEORM]: {
@@ -277,7 +277,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     name: "typeorm",
     label: "TypeORM",
     shortDescription: "TypeScript ORM — 엔티티 기반 데이터베이스 스키마 관리",
-    color: "#D4A017",
+    color: "#E83524",
     icon: "/assets/keycap-icons-hd/typeorm.png",
   },
   [SkillNames.YTDLP]: {

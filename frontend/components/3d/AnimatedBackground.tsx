@@ -115,6 +115,7 @@ const AnimatedBackground = () => {
 
    const handleMouseHover = (e: SplineEvent) => {
      if (!splineApp || selectedSkillRef.current?.name === e.target.name) return;
+     if (activeSectionRef.current === "hero" || activeSectionRef.current === "team") return;
 
      if (e.target.name === "body" || e.target.name === "platform") {
        if (selectedSkillRef.current) {
@@ -170,6 +171,7 @@ const AnimatedBackground = () => {
 
      splineApp.addEventListener("keyUp", () => {
        if (!splineApp || isInputFocused()) return;
+       if (activeSectionRef.current === "hero" || activeSectionRef.current === "team") return;
        if (selectedSkillRef.current) {
          const keycap = splineApp.findObjectByName(selectedSkillRef.current.name);
          if (keycap) {
@@ -183,6 +185,7 @@ const AnimatedBackground = () => {
 
      splineApp.addEventListener("keyDown", (e) => {
        if (!splineApp || isInputFocused()) return;
+       if (activeSectionRef.current === "hero" || activeSectionRef.current === "team") return;
        const skill = SKILLS[e.target.name as SkillNames];
       if (skill) {
         const keycap = splineApp.findObjectByName(skill.name);
@@ -269,6 +272,8 @@ const AnimatedBackground = () => {
     const start = () => {
       let i = 0;
       framesParent.visible = true;
+      framesParent.position.x = 0;
+      framesParent.position.z = 0;
       interval = setInterval(() => {
         if (i % 2) {
           frame1.visible = false;
