@@ -366,6 +366,29 @@ const AnimatedBackground = () => {
 
   // --- Effects ---
 
+  // DPR fix: Spline renders at 2x backing store but mouse uses 1x client coords → raycast offset
+  useEffect(() => {
+    if (!splineApp) return;
+
+    const fixCanvasDPR = () => {
+      try {
+        const renderer = (splineApp as unknown as { _renderer?: { setPixelRatio: (r: number) => void } })._renderer;
+        if (renderer?.setPixelRatio) renderer.setPixelRatio(1);
+        document.querySelectorAll('canvas').forEach((c) => {
+          if (c.width > c.clientWidth * 1.5) {
+            c.width = c.clientWidth;
+            c.height = c.clientHeight;
+          }
+        });
+        splineApp.setSize(window.innerWidth, window.innerHeight);
+      } catch (_) { /* noop */ }
+    };
+
+    requestAnimationFrame(fixCanvasDPR);
+    window.addEventListener('resize', fixCanvasDPR);
+    return () => window.removeEventListener('resize', fixCanvasDPR);
+  }, [splineApp]);
+
   useEffect(() => {
     if (!splineApp) return;
     handleSplineInteractions();
@@ -504,14 +527,6 @@ const AnimatedBackground = () => {
           onLoad={(app: Application) => {
             setSplineApp(app);
             bypassLoading();
-            try {
-              const renderer = (app as unknown as { _renderer?: { setPixelRatio: (r: number) => void } })._renderer;
-              if (renderer?.setPixelRatio) {
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-              }
-            } catch (_) { /* noop */ }
-
-
           }}
           scene="/assets/skills-keyboard.spline"
         />
