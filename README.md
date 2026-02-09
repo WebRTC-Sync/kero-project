@@ -26,7 +26,39 @@
   <img src="https://img.shields.io/badge/AWS-232F3E?style=flat-square&logo=amazonwebservices&logoColor=white" alt="AWS"/>
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Team-JSFLUX--2-F59E0B?style=flat-square" alt="Team JSFLUX-2"/>
+  <img src="https://img.shields.io/badge/Max%20Participants-6-2563EB?style=flat-square" alt="Max Participants"/>
+  <img src="https://img.shields.io/badge/Realtime-LiveKit%20%2B%20Socket.io-0D9488?style=flat-square&logo=webrtc&logoColor=white" alt="Realtime"/>
+  <img src="https://img.shields.io/badge/Modes-Normal%20%7C%20Perfect%20Score%20%7C%20Quiz-E11D48?style=flat-square" alt="Game Modes"/>
+</p>
+
 ---
+
+## 🏷 배지/아이콘
+
+### 서비스 배지
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Service-KERO.OOO-E11D48?style=flat-square" alt="Service"/>
+  <img src="https://img.shields.io/badge/Team-JSFLUX--2-F59E0B?style=flat-square" alt="Team"/>
+  <img src="https://img.shields.io/badge/Max%20Users-6-2563EB?style=flat-square" alt="Max Users"/>
+  <img src="https://img.shields.io/badge/Realtime-WebRTC%20%2B%20Socket.io-0D9488?style=flat-square&logo=webrtc&logoColor=white" alt="Realtime"/>
+  <img src="https://img.shields.io/badge/AI-MelBand%20Roformer%20%7C%20SOFA%20%7C%20FCPE-7C3AED?style=flat-square" alt="AI"/>
+</p>
+
+### 기술 스택 배지
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Frontend-Next.js%2015%20%2B%20React%2019-111827?style=flat-square&logo=react&logoColor=61DAFB" alt="Frontend"/>
+  <img src="https://img.shields.io/badge/Backend-Express%20%2B%20Socket.io-0F172A?style=flat-square&logo=express&logoColor=white" alt="Backend"/>
+  <img src="https://img.shields.io/badge/Database-MySQL-4479A1?style=flat-square&logo=mysql&logoColor=white" alt="MySQL"/>
+  <img src="https://img.shields.io/badge/Cache-Redis-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis"/>
+  <img src="https://img.shields.io/badge/Queue-RabbitMQ-FF6600?style=flat-square&logo=rabbitmq&logoColor=white" alt="RabbitMQ"/>
+  <img src="https://img.shields.io/badge/Media-LiveKit-0D9488?style=flat-square&logo=webrtc&logoColor=white" alt="LiveKit"/>
+  <img src="https://img.shields.io/badge/AI-PyTorch%20%2B%20CUDA-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch CUDA"/>
+  <img src="https://img.shields.io/badge/Deploy-Docker%20%2B%20AWS-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Deploy"/>
+</p>
 
 ## 📖 프로젝트 배경
 
@@ -85,47 +117,47 @@ flowchart LR
 ## 🛠 기술 스택
 
 ### Frontend
-| 기술 | 용도 |
-|------|------|
-| Next.js 15 / React 19 | 웹 애플리케이션 UI |
-| TypeScript | 타입 안전성 |
-| Tailwind CSS | 스타일링 |
-| Redux Toolkit | 상태 관리 |
-| Socket.io Client | 실시간 이벤트 수신 |
-| LiveKit Client | WebRTC 미디어 송수신 |
-| Framer Motion / GSAP / Spline | 인터랙션 및 3D 표현 |
+| 아이콘 | 기술 | 용도 |
+|------|------|------|
+| <img src="https://img.shields.io/badge/Next.js-000000?style=flat-square&logo=nextdotjs&logoColor=white" alt="Next.js"/> <img src="https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React"/> | Next.js 15 / React 19 | 웹 애플리케이션 UI |
+| <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript"/> | TypeScript | 타입 안전성 |
+| <img src="https://img.shields.io/badge/Tailwind%20CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS"/> | Tailwind CSS | 스타일링 |
+| <img src="https://img.shields.io/badge/Redux%20Toolkit-764ABC?style=flat-square&logo=redux&logoColor=white" alt="Redux Toolkit"/> | Redux Toolkit | 상태 관리 |
+| <img src="https://img.shields.io/badge/Socket.io-010101?style=flat-square&logo=socketdotio&logoColor=white" alt="Socket.io"/> | Socket.io Client | 실시간 이벤트 수신 |
+| <img src="https://img.shields.io/badge/LiveKit-0D9488?style=flat-square&logo=webrtc&logoColor=white" alt="LiveKit"/> | LiveKit Client | WebRTC 미디어 송수신 |
+| <img src="https://img.shields.io/badge/Framer%20Motion-0055FF?style=flat-square&logo=framer&logoColor=white" alt="Framer Motion"/> <img src="https://img.shields.io/badge/GSAP-88CE02?style=flat-square" alt="GSAP"/> <img src="https://img.shields.io/badge/Spline-FF6B6B?style=flat-square" alt="Spline"/> | Framer Motion / GSAP / Spline | 인터랙션 및 3D 표현 |
 
 ### Backend
-| 기술 | 용도 |
-|------|------|
-| Express.js | REST API |
-| Socket.io | 실시간 게임/방 상태 동기화 |
-| TypeORM + MySQL | 데이터 영속화 |
-| Redis | 캐시/온라인 상태/실시간 보조 |
-| RabbitMQ | AI 작업 큐 |
-| LiveKit Server SDK | 토큰 발급 및 세션 연동 |
-| AWS S3 | 오디오 파일 저장 |
+| 아이콘 | 기술 | 용도 |
+|------|------|------|
+| <img src="https://img.shields.io/badge/Express.js-000000?style=flat-square&logo=express&logoColor=white" alt="Express.js"/> | Express.js | REST API |
+| <img src="https://img.shields.io/badge/Socket.io-010101?style=flat-square&logo=socketdotio&logoColor=white" alt="Socket.io"/> | Socket.io | 실시간 게임/방 상태 동기화 |
+| <img src="https://img.shields.io/badge/TypeORM-FE6D73?style=flat-square" alt="TypeORM"/> <img src="https://img.shields.io/badge/MySQL-4479A1?style=flat-square&logo=mysql&logoColor=white" alt="MySQL"/> | TypeORM + MySQL | 데이터 영속화 |
+| <img src="https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis"/> | Redis | 캐시/온라인 상태/실시간 보조 |
+| <img src="https://img.shields.io/badge/RabbitMQ-FF6600?style=flat-square&logo=rabbitmq&logoColor=white" alt="RabbitMQ"/> | RabbitMQ | AI 작업 큐 |
+| <img src="https://img.shields.io/badge/LiveKit%20Server-0D9488?style=flat-square&logo=webrtc&logoColor=white" alt="LiveKit Server"/> | LiveKit Server SDK | 토큰 발급 및 세션 연동 |
+| <img src="https://img.shields.io/badge/AWS%20S3-569A31?style=flat-square&logo=amazons3&logoColor=white" alt="AWS S3"/> | AWS S3 | 오디오 파일 저장 |
 
 ### AI Worker
-| 기술 | 용도 |
-|------|------|
-| Python 3.12 | 런타임 |
-| PyTorch + CUDA | GPU 추론 |
-| Mel-Band Roformer | 보컬 분리 |
-| SOFA | 가사 정렬 |
-| FCPE | 음정 추출 |
-| WhisperX / Faster-Whisper | 음성 인식 보조 |
-| yt-dlp | 음원 수집 파이프라인 보조 |
+| 아이콘 | 기술 | 용도 |
+|------|------|------|
+| <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/> | Python 3.12 | 런타임 |
+| <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch"/> <img src="https://img.shields.io/badge/CUDA-76B900?style=flat-square&logo=nvidia&logoColor=white" alt="CUDA"/> | PyTorch + CUDA | GPU 추론 |
+| <img src="https://img.shields.io/badge/MelBand%20Roformer-7C3AED?style=flat-square" alt="MelBand Roformer"/> | Mel-Band Roformer | 보컬 분리 |
+| <img src="https://img.shields.io/badge/SOFA-4F46E5?style=flat-square" alt="SOFA"/> | SOFA | 가사 정렬 |
+| <img src="https://img.shields.io/badge/FCPE-DB2777?style=flat-square" alt="FCPE"/> | FCPE | 음정 추출 |
+| <img src="https://img.shields.io/badge/WhisperX%20%2F%20FasterWhisper-111827?style=flat-square" alt="WhisperX"/> | WhisperX / Faster-Whisper | 음성 인식 보조 |
+| <img src="https://img.shields.io/badge/yt--dlp-FF0000?style=flat-square" alt="yt-dlp"/> | yt-dlp | 음원 수집 파이프라인 보조 |
 
 ### Infra
-| 기술 | 용도 |
-|------|------|
-| Docker Compose | 서비스 오케스트레이션 |
-| Nginx | 리버스 프록시 / HTTPS |
-| LiveKit Server | 실시간 미디어 서버 |
-| Jenkins | CI/CD 자동화 |
-| AWS EC2 + S3 | 배포/스토리지 |
-| ELK Stack | 로그 수집/관측 |
+| 아이콘 | 기술 | 용도 |
+|------|------|------|
+| <img src="https://img.shields.io/badge/Docker%20Compose-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker Compose"/> | Docker Compose | 서비스 오케스트레이션 |
+| <img src="https://img.shields.io/badge/Nginx-009639?style=flat-square&logo=nginx&logoColor=white" alt="Nginx"/> | Nginx | 리버스 프록시 / HTTPS |
+| <img src="https://img.shields.io/badge/LiveKit%20Server-0D9488?style=flat-square&logo=webrtc&logoColor=white" alt="LiveKit Server"/> | LiveKit Server | 실시간 미디어 서버 |
+| <img src="https://img.shields.io/badge/Jenkins-D24939?style=flat-square&logo=jenkins&logoColor=white" alt="Jenkins"/> | Jenkins | CI/CD 자동화 |
+| <img src="https://img.shields.io/badge/AWS%20EC2-FF9900?style=flat-square&logo=amazonec2&logoColor=white" alt="AWS EC2"/> <img src="https://img.shields.io/badge/AWS%20S3-569A31?style=flat-square&logo=amazons3&logoColor=white" alt="AWS S3"/> | AWS EC2 + S3 | 배포/스토리지 |
+| <img src="https://img.shields.io/badge/Elasticsearch-005571?style=flat-square&logo=elasticsearch&logoColor=white" alt="Elasticsearch"/> <img src="https://img.shields.io/badge/Logstash-005571?style=flat-square" alt="Logstash"/> <img src="https://img.shields.io/badge/Kibana-005571?style=flat-square&logo=kibana&logoColor=white" alt="Kibana"/> | ELK Stack | 로그 수집/관측 |
 
 ## 📁 프로젝트 구조
 
