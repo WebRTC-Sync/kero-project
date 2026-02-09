@@ -4,7 +4,7 @@ export const STATES = {
   hero: {
     desktop: {
       scale: { x: 0.14, y: 0.14, z: 0.14 },
-      position: { x: 550, y: -100, z: 0 },
+      position: { x: 650, y: -100, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
     },
     mobile: {
@@ -16,7 +16,7 @@ export const STATES = {
   team: {
     desktop: {
       scale: { x: 0.20, y: 0.20, z: 0.20 },
-      position: { x: 420, y: -40, z: 0 },
+      position: { x: 500, y: -40, z: 0 },
       rotation: { x: 0, y: Math.PI / 12, z: 0 },
     },
     mobile: {
@@ -28,7 +28,7 @@ export const STATES = {
   skills: {
     desktop: {
       scale: { x: 0.15, y: 0.15, z: 0.15 },
-      position: { x: 600, y: -20, z: 0 },
+      position: { x: 500, y: -20, z: 0 },
       rotation: { x: 0, y: Math.PI / 12, z: 0 },
     },
     mobile: {
@@ -40,7 +40,7 @@ export const STATES = {
   architecture: {
     desktop: {
       scale: { x: 0.15, y: 0.15, z: 0.15 },
-      position: { x: 420, y: -40, z: 0 },
+      position: { x: 500, y: -40, z: 0 },
       rotation: { x: Math.PI / 12, y: -Math.PI / 4, z: 0 },
     },
     mobile: {
@@ -52,7 +52,7 @@ export const STATES = {
   features: {
     desktop: {
       scale: { x: 0.15, y: 0.15, z: 0.15 },
-      position: { x: 420, y: -40, z: 0 },
+      position: { x: 500, y: -40, z: 0 },
       rotation: { x: Math.PI, y: Math.PI / 3, z: Math.PI },
     },
     mobile: {
@@ -64,7 +64,7 @@ export const STATES = {
   cta: {
     desktop: {
       scale: { x: 0.14, y: 0.14, z: 0.14 },
-      position: { x: 600, y: -250, z: 0 },
+      position: { x: 700, y: -250, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
     },
     mobile: {
@@ -76,7 +76,7 @@ export const STATES = {
   faq: {
     desktop: {
       scale: { x: 0.10, y: 0.10, z: 0.10 },
-      position: { x: 600, y: -250, z: 0 },
+      position: { x: 700, y: -250, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
     },
     mobile: {
