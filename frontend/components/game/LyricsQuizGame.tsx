@@ -906,15 +906,8 @@ export default function LyricsQuizGame({
           </div>
         </div>
 
-        <div className="flex flex-1 min-h-0 flex-col gap-4 sm:gap-6 pt-2">
-          {cameraElement && (
-            <div className="w-full h-[100px] sm:h-[140px] shrink-0 rounded-2xl overflow-hidden border border-white/20 bg-black/50 shadow-2xl">
-              <div className="h-full">{cameraElement}</div>
-            </div>
-          )}
-
-          <div className="flex min-h-0 flex-1 gap-4 sm:gap-6">
-            <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-6">
+        <div className="flex flex-1 min-h-0 flex-col gap-4 pt-2 sm:gap-6 lg:flex-row" data-testid="quiz-layout-shell">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 sm:gap-6" data-testid="quiz-main-content">
             <div className="w-full min-h-[170px] sm:min-h-[220px] bg-white rounded-2xl shadow-2xl flex flex-col items-center justify-center p-4 sm:p-8 text-center relative overflow-hidden group">
               <div className="absolute top-0 left-0 w-full h-2 bg-[#46178F]"></div>
 
@@ -966,8 +959,12 @@ export default function LyricsQuizGame({
             </div>
 
             <div className="flex-1 w-full relative min-h-0">{renderQuestionContent()}</div>
-            </div>
           </div>
+          {cameraElement && (
+            <aside className="h-[120px] w-full shrink-0 rounded-2xl overflow-hidden border border-white/20 bg-black/50 shadow-2xl sm:h-[160px] lg:h-full lg:w-[260px] xl:w-[300px]" data-testid="quiz-camera-panel">
+              <div className="h-full w-full">{cameraElement}</div>
+            </aside>
+          )}
         </div>
       </div>
 
