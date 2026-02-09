@@ -15,10 +15,15 @@ pipeline {
                     
                     git fetch origin
                     git reset --hard origin/main
-                    
+                     
                     if [ -f /tmp/backend.env.backup ]; then
                         cp /tmp/backend.env.backup backend/.env
                     fi
+
+                    # Ensure workspace is clean.
+                    # NOTE: this keeps ignored files (e.g. backend/.env) but removes untracked files
+                    # that can accidentally break Docker builds.
+                    git clean -fd
                 '''
             }
         }
@@ -38,14 +43,13 @@ pipeline {
                             export LIVEKIT_KEYS="${LK_API_KEY}: ${LK_API_SECRET}"
                         fi
                     fi
-                    set -x
 
                     if [ -z "${LIVEKIT_KEYS}" ]; then
                         echo "LIVEKIT_KEYS is not set. Ensure LIVEKIT_API_KEY and LIVEKIT_API_SECRET exist in backend/.env"
                         exit 1
                     fi
 
-                    docker compose up -d --build frontend backend nginx
+                    docker compose up -d --build frontend backend nginx livekit
                 '''
             }
         }
