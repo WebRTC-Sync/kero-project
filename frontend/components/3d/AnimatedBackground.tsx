@@ -40,7 +40,6 @@ const findSkillFromObject = (obj: { name: string; id: string } | null): Skill | 
 const applyBrandColors = async (app: Application) => {
   try {
     const allObjects = app.getAllObjects();
-    let applied = 0;
 
     const childrenMap = new Map<string, typeof allObjects>();
     for (const obj of allObjects) {
@@ -51,14 +50,25 @@ const applyBrandColors = async (app: Application) => {
       }
     }
 
-    const collectColorMeshes = (uuid: string, result: SPEObject[]) => {
+    // Names of meshes that are keycap bodies (safe to recolor)
+    const KEYCAP_BODY_NAMES = new Set(['keycap-desktop', 'keycap-mobile']);
+    // Names of meshes that are icons/legends (must NOT recolor)
+    const LEGEND_NAMES = new Set(['legend']);
+
+    const collectKeycapBodies = (uuid: string, result: SPEObject[]) => {
       const children = childrenMap.get(uuid) || [];
       for (const child of children) {
+        // Skip legend/icon meshes entirely (don't recurse into them either)
+        if (LEGEND_NAMES.has(child.name)) continue;
+
         const mat = child.material;
-        if (mat && mat.layers && mat.layers.length > 0 && mat.layers[0].type === 'color') {
+        if (
+          KEYCAP_BODY_NAMES.has(child.name) &&
+          mat && mat.layers && mat.layers.length > 0 && mat.layers[0].type === 'color'
+        ) {
           result.push(child);
         }
-        collectColorMeshes((child as any).uuid, result);
+        collectKeycapBodies((child as any).uuid, result);
       }
     };
 
@@ -66,17 +76,15 @@ const applyBrandColors = async (app: Application) => {
       const skillRoot = allObjects.find(obj => obj.name === skill.name);
       if (!skillRoot) continue;
 
-      const colorMeshes: SPEObject[] = [];
-      collectColorMeshes((skillRoot as any).uuid, colorMeshes);
+      const bodies: SPEObject[] = [];
+      collectKeycapBodies((skillRoot as any).uuid, bodies);
 
-      for (const mesh of colorMeshes) {
+      for (const mesh of bodies) {
         try {
           (mesh.material!.layers[0] as any).color = skill.keycapColor ?? skill.color;
-          applied++;
         } catch (_) {}
       }
     }
-    console.log(`[applyBrandColors] Applied to ${applied} keycaps`);
   } catch (e) {
     console.error('[applyBrandColors] FATAL:', e);
   }

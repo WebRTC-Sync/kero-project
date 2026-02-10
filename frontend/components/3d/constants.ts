@@ -81,6 +81,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     label: "Socket.io",
     shortDescription: "양방향 실시간 통신 — 방 관리, 이벤트 브로드캐스트 담당",
     color: "#C9B8A8",
+    keycapColor: "#2A2520",
     icon: "/assets/keycap-icons-hd/socketdotio.png",
   },
   [SkillNames.REACT]: {
@@ -114,6 +115,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     label: "Tailwind CSS",
     shortDescription: "유틸리티 클래스로 빠르게 스타일링 — 다크 테마 UI의 비밀",
     color: "#38BDF8",
+    keycapColor: "#1A3A4A",
     icon: "/assets/keycap-icons-hd/tailwindcss.png",
   },
   [SkillNames.NODEJS]: {
@@ -130,6 +132,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     label: "Express.js",
     shortDescription: "RESTful API + 미들웨어로 설계한 백엔드 서버",
     color: "#7B7B7B",
+    keycapColor: "#2A2A2A",
     icon: "/assets/keycap-icons-hd/express.png",
   },
   [SkillNames.POSTGRES]: {
@@ -202,6 +205,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     label: "Linux",
     shortDescription: "Ubuntu 서버 — 모든 서비스가 돌아가는 안정적인 운영 체제",
     color: "#ffffff",
+    keycapColor: "#2A2A2A",
     icon: "/assets/keycap-icons-hd/linux.png",
   },
   [SkillNames.DOCKER]: {
@@ -226,6 +230,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     label: "AWS S3",
     shortDescription: "클라우드 스토리지 — 음원, MR, 보컬 파일을 안전하게 저장",
     color: "#8BC34A",
+    keycapColor: "#1A2E10",
     icon: "/assets/keycap-icons-hd/amazons3.png",
   },
   [SkillNames.GCP]: {
@@ -299,6 +304,7 @@ export const SKILLS: Record<SkillNames, Skill> = {
     label: "Lenis",
     shortDescription: "부드러운 스크롤 라이브러리 — 자연스러운 페이지 전환 경험",
     color: "#4ADE80",
+    keycapColor: "#1A2E1A",
     icon: "/assets/keycap-icons-hd/lenis.png",
   },
   [SkillNames.KUROSHIRO]: {
