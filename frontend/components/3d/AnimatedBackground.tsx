@@ -31,34 +31,50 @@ const findSkillFromObject = (obj: { name: string; id: string } | null): Skill | 
 };
 
 /*
- * getAllObjects() returns a flat list ordered by scene hierarchy.
- * We build a map of skill positions, then for each skill look forward
- * (and backward as fallback) for the nearest keycap-desktop to color.
+ * getAllObjects() returns a flat list. Each skill (e.g. "react") is an Empty
+ * container whose children are: keycap → { legend, keycap-desktop, keycap-mobile }
+ * and a Text mesh. The colored meshes are keycap-desktop, keycap-mobile, and Text —
+ * each has material.layers[0] of type "color". We walk the flat list to find
+ * children by parentUuid and set the color layer directly.
  */
 const applyBrandColors = async (app: Application) => {
   try {
     const allObjects = app.getAllObjects();
     let applied = 0;
 
+    const childrenMap = new Map<string, typeof allObjects>();
+    for (const obj of allObjects) {
+      const parentId = (obj as any).parentUuid as string | undefined;
+      if (parentId) {
+        if (!childrenMap.has(parentId)) childrenMap.set(parentId, []);
+        childrenMap.get(parentId)!.push(obj);
+      }
+    }
+
+    const collectColorMeshes = (uuid: string, result: SPEObject[]) => {
+      const children = childrenMap.get(uuid) || [];
+      for (const child of children) {
+        const mat = child.material;
+        if (mat && mat.layers && mat.layers.length > 0 && mat.layers[0].type === 'color') {
+          result.push(child);
+        }
+        collectColorMeshes((child as any).uuid, result);
+      }
+    };
+
     for (const skill of Object.values(SKILLS)) {
-      const keycapObj = allObjects.find(obj => obj.name === skill.name);
-      if (!keycapObj) continue;
-      
-      try {
-        const color = skill.color.replace('#', '');
-        const r = parseInt(color.substring(0, 2), 16) / 255;
-        const g = parseInt(color.substring(2, 4), 16) / 255;
-        const b = parseInt(color.substring(4, 6), 16) / 255;
-        
-        if ((keycapObj as any).material) {
-          (keycapObj as any).material.color = { r, g, b };
+      const skillRoot = allObjects.find(obj => obj.name === skill.name);
+      if (!skillRoot) continue;
+
+      const colorMeshes: SPEObject[] = [];
+      collectColorMeshes((skillRoot as any).uuid, colorMeshes);
+
+      for (const mesh of colorMeshes) {
+        try {
+          (mesh.material!.layers[0] as any).color = skill.color;
           applied++;
-        }
-        if ((keycapObj as any).color) {
-          (keycapObj as any).color = skill.color;
-          applied++;
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
     }
     console.log(`[applyBrandColors] Applied to ${applied} keycaps`);
   } catch (e) {
