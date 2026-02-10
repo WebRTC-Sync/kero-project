@@ -57,15 +57,16 @@ function LoginForm() {
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
 
+    const GOOGLE_CLIENT_ID = "487950843834-60mmj4rq9pvklm6mruuvro06ho62ujma.apps.googleusercontent.com";
+    const KAKAO_CLIENT_ID = "e5917246d7c49916d1bb073f3e1906ac";
+
     let url = "";
     if (provider === "google") {
-      const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
       const redirectUri = `${window.location.origin}/auth/google/callback`;
-      url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent("email profile")}&prompt=select_account`;
+      url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent("email profile")}&prompt=select_account`;
     } else {
-      const clientId = process.env.NEXT_PUBLIC_KAKAO_CLIENT_ID;
       const redirectUri = `${window.location.origin}/auth/kakao/callback`;
-      url = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&prompt=login`;
+      url = `https://kauth.kakao.com/oauth/authorize?client_id=${KAKAO_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&prompt=login`;
     }
 
     const popup = window.open(url, `${provider}_login`, `width=${width},height=${height},left=${left},top=${top}`);
