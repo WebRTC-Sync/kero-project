@@ -40,6 +40,7 @@ const findSkillFromObject = (obj: { name: string; id: string } | null): Skill | 
 const applyBrandColors = async (app: Application) => {
   try {
     const allObjects = app.getAllObjects();
+    let applied = 0;
 
     const childrenMap = new Map<string, typeof allObjects>();
     for (const obj of allObjects) {
@@ -50,13 +51,14 @@ const applyBrandColors = async (app: Application) => {
       }
     }
 
-    const collectMeshes = (uuid: string, result: SPEObject[]) => {
+    const collectColorMeshes = (uuid: string, result: SPEObject[]) => {
       const children = childrenMap.get(uuid) || [];
       for (const child of children) {
-        if (child.material) {
+        const mat = child.material;
+        if (mat && mat.layers && mat.layers.length > 0 && mat.layers[0].type === 'color') {
           result.push(child);
         }
-        collectMeshes((child as any).uuid, result);
+        collectColorMeshes((child as any).uuid, result);
       }
     };
 
@@ -64,18 +66,19 @@ const applyBrandColors = async (app: Application) => {
       const skillRoot = allObjects.find(obj => obj.name === skill.name);
       if (!skillRoot) continue;
 
-      const meshes: SPEObject[] = [];
-      collectMeshes((skillRoot as any).uuid, meshes);
+      const colorMeshes: SPEObject[] = [];
+      collectColorMeshes((skillRoot as any).uuid, colorMeshes);
 
-      const targetColor = skill.keycapColor ?? skill.color;
-      for (const mesh of meshes) {
+      for (const mesh of colorMeshes) {
         try {
-          mesh.color = targetColor;
+          (mesh.material!.layers[0] as any).color = skill.keycapColor ?? skill.color;
+          applied++;
         } catch (_) {}
       }
     }
+    console.log(`[applyBrandColors] Applied to ${applied} keycaps`);
   } catch (e) {
-    console.error('[applyBrandColors]', e);
+    console.error('[applyBrandColors] FATAL:', e);
   }
 };
 
