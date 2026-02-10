@@ -12,12 +12,18 @@ pipeline {
                     if [ -f backend/.env ]; then
                         cp backend/.env /tmp/backend.env.backup
                     fi
+                    if [ -f frontend/.env ]; then
+                        cp frontend/.env /tmp/frontend.env.backup
+                    fi
                     
                     git fetch origin
                     git reset --hard origin/main
                      
                     if [ -f /tmp/backend.env.backup ]; then
                         cp /tmp/backend.env.backup backend/.env
+                    fi
+                    if [ -f /tmp/frontend.env.backup ]; then
+                        cp /tmp/frontend.env.backup frontend/.env
                     fi
 
                     # Ensure workspace is clean.
@@ -42,6 +48,11 @@ pipeline {
                         if [ -n "${LK_API_KEY}" ] && [ -n "${LK_API_SECRET}" ]; then
                             export LIVEKIT_KEYS="${LK_API_KEY}: ${LK_API_SECRET}"
                         fi
+
+                        GOOGLE_CID="$(grep -E '^GOOGLE_CLIENT_ID=' backend/.env | head -n 1 | cut -d= -f2-)"
+                        KAKAO_CID="$(grep -E '^KAKAO_CLIENT_ID=' backend/.env | head -n 1 | cut -d= -f2-)"
+                        [ -n "${GOOGLE_CID}" ] && export GOOGLE_CLIENT_ID="${GOOGLE_CID}"
+                        [ -n "${KAKAO_CID}" ] && export KAKAO_CLIENT_ID="${KAKAO_CID}"
                     fi
 
                     if [ -z "${LIVEKIT_KEYS}" ]; then
